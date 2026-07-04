@@ -14,7 +14,7 @@
   html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
     font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",-apple-system,sans-serif;
     color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
-  #game{position:fixed;inset:0;display:block;width:100vw;height:100vh}
+  #game{position:fixed;inset:0;display:block;width:100vw;height:100vh;height:100dvh}
   .hidden{display:none !important}
 
   /* ---------- HUD ---------- */
@@ -579,9 +579,9 @@ const BGM_CHORDS=[[57,60,64],[53,57,60],[48,52,55],[55,59,62]];
 const midiF=m=>440*Math.pow(2,(m-69)/12);
 function startPad(){ if(muted||!AC||bgm)return;
   const master=AC.createGain(); master.gain.value=0.0001;
-  const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1500;
+  const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=2100;
   master.connect(lp).connect(MG);
-  master.gain.linearRampToValueAtTime(0.17,AC.currentTime+2.5);
+  master.gain.linearRampToValueAtTime(0.32,AC.currentTime+2.5);
   const dly=AC.createDelay(1); dly.delayTime.value=0.34;
   const fb=AC.createGain(); fb.gain.value=0.34;
   dly.connect(fb).connect(dly); dly.connect(master);
@@ -597,14 +597,15 @@ function startPad(){ if(muted||!AC||bgm)return;
   const ARP=[0,1,2,1,0,2,1,2];
   function schedBar(t,bar){
     const ch=BGM_CHORDS[bar%4];
-    ch.forEach(m=>{ note(t,midiF(m),spb*4.1,"triangle",0.05);
-      note(t,midiF(m)+1.7,spb*4.1,"sine",0.032); });          // 패드(디튠)
-    note(t,midiF(ch[0]-24),spb*3.6,"sine",0.10);               // 베이스
-    note(t+spb*2,midiF(ch[0]-12),spb*1.5,"sine",0.045);
-    for(let i=0;i<8;i++){                                       // 아르페지오→딜레이
+    ch.forEach(m=>{ note(t,midiF(m),spb*4.1,"triangle",0.06);
+      note(t,midiF(m)+1.7,spb*4.1,"sine",0.04); });            // 패드(디튠)
+    note(t,midiF(ch[0]-24),spb*3.6,"sine",0.13);               // 베이스(이어폰용)
+    note(t+spb*2,midiF(ch[0]-12),spb*1.5,"sine",0.06);
+    for(let i=0;i<8;i++){                                       // 아르페지오→딜레이 (폰 스피커 주역)
       const m=ch[ARP[i]]+12+((bar%2&&i===7)?12:0);
-      note(t+i*spb/2,midiF(m),0.30,"sine",0.06,dly);
+      note(t+i*spb/2,midiF(m),0.32,"sine",0.095,dly);
     }
+    note(t+spb*3,midiF(ch[2]+24),0.5,"triangle",0.05,dly);      // 고음 스파클
   }
   let bar=0, nextT=AC.currentTime+0.15;
   const timer=setInterval(()=>{
@@ -662,9 +663,16 @@ let themeCur="night";
 const cv=$("#game"), ctx=cv.getContext("2d");
 let W=0,H=0,HW=0,HH=0,DPR=1;
 function resize(){ DPR=Math.min(2,window.devicePixelRatio||1);
-  W=window.innerWidth; H=window.innerHeight; HW=W/2; HH=H/2;
+  // iOS Safari: 하단 툴바를 제외한 실제 보이는 영역 기준 (100vh 잘림 방지)
+  const vv=window.visualViewport;
+  W=Math.round(vv?vv.width:window.innerWidth);
+  H=Math.round(vv?vv.height:window.innerHeight);
+  HW=W/2; HH=H/2;
+  cv.style.width=W+"px"; cv.style.height=H+"px";
   cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
-window.addEventListener("resize",resize); resize();
+window.addEventListener("resize",resize);
+if(window.visualViewport) window.visualViewport.addEventListener("resize",resize);
+resize();
 
 // ---------- 도로/트랙 ----------
 const SEG_LEN=200, ROAD_W=1100, CAM_H=420;
