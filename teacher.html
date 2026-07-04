@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>마음의 밤길 라이더 — 교사 발표모드</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{--mint:#3FE5A0;--pink:#ff4fa3;--cyan:#38d4ff;--bg:#05070e;
+    --panel:rgba(12,18,34,.92);--ink:#eaf4ff;--dim:#8fa3c0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:radial-gradient(ellipse at 50% -20%,#101a33,var(--bg) 60%);min-height:100vh;
+    font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:var(--ink);padding:28px}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1{font-size:26px;font-weight:900;text-align:center;margin-bottom:4px}
+  h1 em{font-style:normal;color:var(--mint)}
+  .sub{text-align:center;color:var(--dim);font-size:14px;margin-bottom:26px}
+
+  .card{background:var(--panel);border:1px solid rgba(63,229,160,.35);border-radius:16px;
+    padding:22px;box-shadow:0 0 30px rgba(63,229,160,.08)}
+  #setup{max-width:460px;margin:8vh auto 0;text-align:center}
+  #setup .row{display:flex;gap:10px;margin:16px 0}
+  #code{flex:1;background:rgba(255,255,255,.06);border:1.5px solid rgba(63,229,160,.4);border-radius:12px;
+    padding:14px;font-size:24px;font-weight:900;letter-spacing:.3em;text-align:center;color:var(--mint);
+    text-transform:uppercase;outline:none;font-family:inherit;min-width:0}
+  button{border:none;border-radius:12px;padding:14px 18px;font-family:inherit;font-size:15px;
+    font-weight:800;cursor:pointer}
+  .primary{background:linear-gradient(135deg,var(--mint),#2bc4ff);color:#06121c}
+  .ghost{background:rgba(255,255,255,.08);color:var(--ink);border:1px solid rgba(255,255,255,.2)}
+
+  #live{display:none}
+  .top{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+  .top .card{flex:1;min-width:230px;text-align:center}
+  #code-big{font-size:56px;font-weight:900;letter-spacing:.25em;color:var(--mint);
+    text-shadow:0 0 30px rgba(63,229,160,.5)}
+  .lbl{color:var(--dim);font-size:13px;margin-top:6px}
+  #qr{width:190px;height:190px;border-radius:12px;background:#fff;padding:8px}
+  .bignum{font-size:44px;font-weight:900;color:var(--mint)}
+  .bignum.pink{color:var(--pink)}
+  .statRow{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .statRow>div{min-width:110px}
+
+  .forest{margin-bottom:18px}
+  .forest h3{font-size:16px;color:var(--cyan);margin-bottom:12px}
+  .shroomRow{display:flex;justify-content:space-between;font-size:34px;margin-bottom:12px}
+  .shroomRow span{filter:grayscale(1) brightness(.4);transition:filter .8s}
+  .shroomRow span.lit{filter:none;text-shadow:0 0 18px rgba(63,229,160,.9)}
+  .bar{height:16px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+  .bar i{display:block;height:100%;width:0%;border-radius:999px;transition:width 1s ease;
+    background:linear-gradient(90deg,var(--mint),var(--cyan),#8f6bff)}
+  .forest .pct{font-size:14px;color:var(--dim);margin-top:8px;text-align:right}
+
+  .cols{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+  #gridCard{flex:2;min-width:320px}
+  #wrongCard{flex:1;min-width:260px}
+  h3.sec{font-size:16px;color:var(--mint);margin-bottom:12px}
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .rider{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;
+    padding:10px 12px;transition:box-shadow .3s}
+  .rider.flash{box-shadow:0 0 16px rgba(63,229,160,.6)}
+  .rider .nm{font-weight:800;font-size:14px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rider .ff{color:var(--mint);font-weight:900;font-size:18px}
+  .rider .st{font-size:12px;color:var(--dim);margin-top:3px}
+  .rider .prog{height:5px;border-radius:99px;background:rgba(255,255,255,.1);margin-top:6px;overflow:hidden}
+  .rider .prog i{display:block;height:100%;background:var(--mint);transition:width .8s}
+  .rider.done{border-color:rgba(255,215,94,.55)}
+  #empty{grid-column:1/-1;text-align:center;color:var(--dim);padding:40px 0;line-height:1.7}
+  .wrongItem{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .wrongItem .rank{font-size:22px}
+  .wrongItem .name{font-weight:800;flex:1}
+  .wrongItem .cnt{color:var(--pink);font-weight:900}
+  .wrongItem .wbar{height:6px;border-radius:99px;background:rgba(255,79,163,.7)}
+  #wrongEmpty{color:var(--dim);font-size:13px;line-height:1.6}
+  .tip{margin-top:14px;font-size:12.5px;color:var(--dim);line-height:1.6;
+    border-top:1px solid rgba(255,255,255,.1);padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏍️ 마음의 밤길 라이더 — <em>교사 발표모드</em></h1>
+  <div class="sub">LevLab Yeol · 마음건강 SEL — 감정 조절</div>
+
+  <div id="setup" class="card">
+    <h3 style="font-size:18px">교실 코드 만들기</h3>
+    <p style="color:var(--dim);font-size:14px;margin-top:8px;line-height:1.6">
+      코드를 만들고 시작을 누르면, 학생들이 게임 첫 화면(우리 반 모드)에서<br>이 코드로 입장합니다.</p>
+    <div class="row">
+      <input id="code" maxlength="4" placeholder="CODE">
+      <button class="ghost" id="btn-new">🎲 새 코드</button>
+    </div>
+    <button class="primary" id="btn-start" style="width:100%">발표모드 시작 🌙</button>
+  </div>
+
+  <div id="live">
+    <div class="top">
+      <div class="card"><div id="code-big">----</div><div class="lbl">교실 코드 — 게임에서 ‘우리 반 모드’로 입장</div></div>
+      <div class="card"><img id="qr" alt="QR"><div class="lbl">QR로 바로 입장</div></div>
+      <div class="card">
+        <div class="statRow">
+          <div><div class="bignum" id="n-riders">0</div><div class="lbl">입장</div></div>
+          <div><div class="bignum" id="n-done">0</div><div class="lbl">완주</div></div>
+          <div><div class="bignum" id="n-ff">0</div><div class="lbl">반 전체 ✦</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card forest">
+      <h3>✦ 우리 반이 함께 밝힌 숲</h3>
+      <div class="shroomRow" id="shroomRow"></div>
+      <div class="bar"><i id="forestFill"></i></div>
+      <div class="pct" id="forestPct"></div>
+    </div>
+
+    <div class="cols">
+      <div class="card" id="gridCard">
+        <h3 class="sec">🏍️ 라이더 현황</h3>
+        <div id="grid"><div id="empty">아직 입장한 학생이 없어요.<br>게임 첫 화면 → 우리 반 모드 → 교실 코드 입력 🌱</div></div>
+      </div>
+      <div class="card" id="wrongCard">
+        <h3 class="sec">🏷️ 우리 반이 헷갈린 생각 이름표 TOP3</h3>
+        <div id="wrongList"><div id="wrongEmpty">인지왜곡 관문 결과가 모이면 여기에 표시됩니다.<br>다음 수업의 포인트로 활용해보세요!</div></div>
+        <div class="tip">💡 활용 팁: 가장 많이 헷갈린 이름표 1개를 골라, 실제 사례로 반 전체와
+          “생각 다시 쓰기”를 해보세요. (예: 파국화 → 최악 대신 ‘가장 그럴듯한 결말’ 말해보기)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const FB_CONFIG = {
+  apiKey: "AIzaSyAPjRhpGsBiILOk4xIO6qdwU5deE556nis",
+  authDomain: "mind-jump.firebaseapp.com",
+  projectId: "mind-jump",
+  storageBucket: "mind-jump.firebasestorage.app",
+  messagingSenderId: "640879942374",
+  appId: "1:640879942374:web:072026fb598ddc39777927"
+};
+firebase.initializeApp(FB_CONFIG);
+const db = firebase.firestore();
+
+const GAME_URL = "https://cleveranawim-source.github.io/mind-ride/";
+const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // 헷갈리는 I·O·0·1 제외
+const $ = s => document.querySelector(s);
+
+$("#btn-new").onclick = () => {
+  let c = "";
+  for (let i = 0; i < 4; i++) c += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  $("#code").value = c;
+};
+$("#btn-start").onclick = () => {
+  const code = ($("#code").value || "").trim().toUpperCase();
+  if (code.length !== 4) { alert("4글자 코드를 만들어주세요!"); return; }
+  startLive(code);
+};
+
+let unsub = null, gotSnap = false, prevFF = {};
+function listen(code, attempt){
+  if (unsub){ try { unsub(); } catch(e){} }
+  gotSnap = false;
+  unsub = db.collection("rooms").doc(code).collection("riders")
+    .onSnapshot(
+      snap => { gotSnap = true; render(snap); },
+      () => { if (attempt < 6) setTimeout(() => listen(code, attempt + 1), 1500); }
+    );
+  setTimeout(() => { if (!gotSnap && attempt < 6) listen(code, attempt + 1); }, 3000);
+}
+function startLive(code){
+  $("#setup").style.display = "none";
+  $("#live").style.display = "block";
+  $("#code-big").textContent = code;
+  $("#qr").src = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data="
+    + encodeURIComponent(GAME_URL + "?room=" + code);
+  const row = $("#shroomRow"); row.innerHTML = "";
+  for (let i = 0; i < 10; i++){ const s = document.createElement("span"); s.textContent = "🍄"; row.appendChild(s); }
+  listen(code, 0);
+}
+
+const MEDAL = { gold: "🥇", silver: "🥈", bronze: "🥉" };
+function render(snap){
+  const riders = [];
+  snap.forEach(d => riders.push({ id: d.id, ...d.data() }));
+  riders.sort((a, b) => (b.ff || 0) - (a.ff || 0));
+
+  const totalFF = riders.reduce((s, r) => s + (r.ff || 0), 0);
+  const nDone = riders.filter(r => r.done).length;
+  $("#n-riders").textContent = riders.length;
+  $("#n-done").textContent = nDone;
+  $("#n-ff").textContent = totalFF;
+
+  // 숲: 학생 수 × 40 반딧불이를 100%로
+  const goal = Math.max(riders.length, 1) * 40;
+  const pct = Math.min(100, Math.round(totalFF / goal * 100));
+  $("#forestFill").style.width = pct + "%";
+  $("#forestPct").textContent = `${pct}% — 목표 ✦${goal} 중 ✦${totalFF}`;
+  [...$("#shroomRow").children].forEach((s, i) => s.classList.toggle("lit", i < Math.round(pct / 10)));
+
+  // 라이더 그리드
+  const grid = $("#grid");
+  if (!riders.length){ grid.innerHTML = '<div id="empty">아직 입장한 학생이 없어요.<br>게임 첫 화면 → 우리 반 모드 → 교실 코드 입력 🌱</div>'; return; }
+  grid.innerHTML = "";
+  for (const r of riders){
+    const d = document.createElement("div");
+    d.className = "rider" + (r.done ? " done" : "");
+    if (prevFF[r.id] !== undefined && prevFF[r.id] !== r.ff) d.classList.add("flash");
+    prevFF[r.id] = r.ff;
+    const st = r.done
+      ? `${MEDAL[r.grade] || "🏁"} 완주 · 호흡 ${r.sync || 0}%`
+      : `달리는 중 ${r.prog || 0}%`;
+    d.innerHTML = `<div class="nm">${(r.name || "라이더").replace(/[<>&]/g, "")}</div>
+      <div class="ff">✦ ${r.ff || 0}</div><div class="st">${st}</div>
+      <div class="prog"><i style="width:${r.done ? 100 : (r.prog || 0)}%"></i></div>`;
+    grid.appendChild(d);
+  }
+
+  // 오답 TOP3
+  const agg = {};
+  for (const r of riders) for (const k in (r.wrong || {})) agg[k] = (agg[k] || 0) + r.wrong[k];
+  const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const wl = $("#wrongList");
+  if (!top.length){ wl.innerHTML = '<div id="wrongEmpty">인지왜곡 관문 결과가 모이면 여기에 표시됩니다.<br>다음 수업의 포인트로 활용해보세요!</div>'; return; }
+  const max = top[0][1];
+  wl.innerHTML = top.map(([k, v], i) =>
+    `<div class="wrongItem"><span class="rank">${["🥇","🥈","🥉"][i]}</span>
+     <div style="flex:1"><div class="name">${k}</div>
+     <div class="wbar" style="width:${Math.round(v / max * 100)}%"></div></div>
+     <span class="cnt">${v}회</span></div>`).join("");
+}
+</script>
+</body>
+</html>

@@ -138,6 +138,14 @@
   .howItem b{color:var(--mint)} .howItem .warn{color:#ff8aa5;font-weight:700}
   .modeNote{font-size:13px;color:var(--cyan);background:rgba(56,212,255,.08);
     border:1px solid rgba(56,212,255,.25);border-radius:10px;padding:10px 12px;margin-bottom:16px;line-height:1.5}
+  #roomJoin{margin-bottom:16px}
+  .rjRow{display:flex;gap:8px}
+  .rjRow input{flex:1;background:rgba(255,255,255,.06);border:1.5px solid rgba(56,212,255,.35);
+    border-radius:10px;padding:11px 12px;color:var(--ink);font-family:inherit;font-size:15px;
+    font-weight:700;outline:none;min-width:0}
+  .rjRow input:focus{border-color:var(--cyan)}
+  #inpRoom{text-transform:uppercase;letter-spacing:.15em}
+  .rjHint{font-size:12px;color:var(--dim);margin-top:6px}
   .courseSel{display:flex;gap:10px;margin-bottom:16px}
   .cbtn{flex:1;padding:12px 8px;border-radius:10px;border:1.5px solid rgba(255,255,255,.18);
     background:rgba(255,255,255,.05);color:var(--dim);font-family:inherit;font-weight:800;
@@ -233,6 +241,20 @@
     box-shadow:0 0 22px rgba(255,140,70,.25);line-height:1.3}
   #btnBoost.holding{background:rgba(90,32,14,.92);box-shadow:0 0 36px rgba(255,140,60,.75);transform:scale(.95)}
   #btnMute{top:calc(max(10px,env(safe-area-inset-top)) + 52px);left:14px;bottom:auto}
+  #btnPause{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 52px);left:62px;z-index:60;
+    width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.2);
+    background:rgba(10,16,30,.7);color:var(--ink);font-size:16px;cursor:pointer}
+  .setRow{display:flex;align-items:center;gap:12px;justify-content:center;
+    font-size:15px;font-weight:700;margin-top:14px}
+  .setRow input[type=range]{flex:1;max-width:220px;accent-color:var(--mint)}
+  .setRow.checks{gap:26px}
+  .setRow label{display:flex;align-items:center;gap:7px;cursor:pointer}
+  .setRow input[type=checkbox]{width:18px;height:18px;accent-color:var(--mint)}
+  #myRecord{margin-top:18px;font-size:13.5px;color:var(--dim);font-weight:600;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+    border-radius:999px;padding:8px 18px}
+  #heatSpark{width:100%;height:90px;display:block}
+  .sparkNote{font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.5}
 
   /* ---------- 인트로 시네마틱 ---------- */
   #introOverlay{position:fixed;inset:0;background:#000;z-index:70;
@@ -345,8 +367,9 @@
   <div class="tagline">화가 날수록 액셀을 당기고 싶어진다.<br>하지만 밤길의 주인은 <b>속도를 다룰 줄 아는 사람</b>이다.</div>
   <div class="btnRow">
     <button class="btn primary" id="btnSolo">🏍️ &nbsp;혼자 달리기</button>
-    <button class="btn secondary" id="btnClass">🌙 &nbsp;우리 반 모드 <small>(데모)</small></button>
+    <button class="btn secondary" id="btnClass">🌙 &nbsp;우리 반 모드</button>
   </div>
+  <div id="myRecord" class="hidden"></div>
   <div class="credit">LevLab Yeol · 마음건강 SEL — 감정 조절</div>
 </div>
 
@@ -354,8 +377,15 @@
 <div id="howtoScreen" class="screen hidden">
   <div class="howBox">
     <h2>달리기 전에, <em>딱 5가지</em></h2>
-    <div class="modeNote hidden" id="classNote">🌙 우리 반 모드(데모): 친구 24명의 라이딩이 시뮬레이션됩니다.
-      모두가 모은 반딧불이가 숲을 함께 밝혀요. 실제 학급 실시간 연동은 다음 버전!</div>
+    <div class="modeNote hidden" id="classNote">🌙 우리 반 모드: 선생님이 알려준 <b>교실 코드</b>를 입력하면
+      반 전체의 반딧불이가 실시간으로 합쳐져 숲을 밝힙니다. 코드가 없으면 데모(가상 친구 24명)로 체험!</div>
+    <div id="roomJoin" class="hidden">
+      <div class="rjRow">
+        <input id="inpRoom" maxlength="4" placeholder="교실 코드 (예: A3FK)" autocapitalize="characters" autocomplete="off">
+        <input id="inpName" maxlength="8" placeholder="닉네임 (선택)" autocomplete="off">
+      </div>
+      <div class="rjHint">코드가 없으면 비워두세요 — 데모 모드로 달립니다.</div>
+    </div>
     <div class="courseSel">
       <button class="cbtn active" data-course="class">🏫 수업 코스<small>약 3분 · 과제 14개</small></button>
       <button class="cbtn" data-course="free">🌌 탐험 코스<small>약 5분 · 과제 18개</small></button>
@@ -381,6 +411,8 @@
       <div class="forestBar"><i id="forestFill"></i></div>
       <div class="pct" id="forestPct"></div>
     </div>
+    <div class="recap" id="recapHeat"><h4>🌡️ 내 마음 온도 흐름</h4>
+      <canvas id="heatSpark"></canvas><div class="sparkNote" id="sparkNote"></div></div>
     <div class="recap" id="recapChoices"><h4>🛣️ 갈림길에서 내가 고른 문장</h4><ul></ul></div>
     <div class="recap" id="recapQuiz"><h4>🏷️ 생각에 이름표 붙이기 (인지왜곡)</h4><ul></ul></div>
     <div class="recap" id="recapEmo"><h4>💠 감정 이름 붙이기</h4><ul></ul></div>
@@ -398,6 +430,23 @@
 <button id="btnBreath" class="hidden">🌬️<br>숨 고르기<br><small>(꾹)</small></button>
 <button id="btnBoost" class="hidden">🔥<br>부스트<br><small>(꾹)</small></button>
 <button id="btnMute">🔊</button>
+<button id="btnPause" class="hidden">⏸</button>
+
+<!-- 일시정지 / 설정 -->
+<div id="pauseOverlay" class="overlay hidden">
+  <div class="card">
+    <h3>일시정지 · 설정</h3>
+    <div class="setRow">🔊 음량 <input type="range" id="volSlider" min="0" max="100" step="5"></div>
+    <div class="setRow checks">
+      <label><input type="checkbox" id="chkVib"> 진동</label>
+      <label><input type="checkbox" id="chkLow"> 저사양 모드</label>
+    </div>
+    <div class="chips" style="margin-top:16px">
+      <button class="btn primary" id="btnResume">▶ 이어 달리기</button>
+      <button class="btn ghost" id="btnQuit">처음으로</button>
+    </div>
+  </div>
+</div>
 
 <script src="content.js"></script>
 <script>
@@ -463,17 +512,31 @@ const ENCOURAGE=[
  "감정에 정확한 이름을 붙이는 순간, 감정의 크기는 절반이 돼요."];
 
 // ---------- 오디오 ----------
-let AC=null, muted=localStorage.getItem("mr_mute")==="1", padNodes=null;
-function initAudio(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(AC&&AC.state==="suspended")AC.resume(); }
+let AC=null, MG=null, muted=localStorage.getItem("mr_mute")==="1", padNodes=null, engine=null;
+let vibOn=localStorage.getItem("mr_vib")!=="0";
+function initAudio(){
+  if(!AC){ try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    MG=AC.createGain(); MG.gain.value=+(localStorage.getItem("mr_vol")??0.8); MG.connect(AC.destination);
+  }catch(e){} }
+  if(AC&&AC.state==="suspended")AC.resume(); }
 function tone(f,d,type,g,f2){ if(muted||!AC)return; const t=AC.currentTime;
   const o=AC.createOscillator(),v=AC.createGain(); o.type=type||"sine"; o.frequency.setValueAtTime(f,t);
   if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);
   v.gain.setValueAtTime(g||0.12,t); v.gain.exponentialRampToValueAtTime(0.0001,t+d);
-  o.connect(v).connect(AC.destination); o.start(t); o.stop(t+d); }
+  o.connect(v).connect(MG); o.start(t); o.stop(t+d); }
+function startEngine(){ if(muted||!AC||engine)return;
+  const o=AC.createOscillator(),g=AC.createGain(),f=AC.createBiquadFilter();
+  o.type="sawtooth"; o.frequency.value=45; f.type="lowpass"; f.frequency.value=240;
+  g.gain.value=0.0001; o.connect(f).connect(g).connect(MG); o.start(); engine={o,g}; }
+function stopEngine(){ if(!engine)return;
+  try{ engine.g.gain.linearRampToValueAtTime(0.0001,AC.currentTime+.4);
+    const e=engine; setTimeout(()=>{try{e.o.stop();}catch(x){}},500); }catch(e){}
+  engine=null; }
 const sfx={
   collect(){tone(880,.09,"sine",.10,1320);},
   bonus(){tone(1046,.12,"sine",.10,1568);},
-  hit(){tone(110,.22,"sawtooth",.18,55); if(navigator.vibrate)navigator.vibrate(40);},
+  hit(){tone(110,.22,"sawtooth",.18,55); if(vibOn&&navigator.vibrate)navigator.vibrate(40);},
   good(){tone(523,.12,"sine",.10);setTimeout(()=>tone(659,.12,"sine",.10),90);setTimeout(()=>tone(784,.2,"sine",.10),180);},
   bad(){tone(220,.25,"triangle",.14,170);},
   finish(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,.3,"sine",.11),i*130));}
@@ -485,9 +548,11 @@ function startPad(){ if(muted||!AC||padNodes)return;
   o1.type="sine";o1.frequency.value=55; o2.type="sine";o2.frequency.value=82.5;
   const lfo=AC.createOscillator(),lg=AC.createGain(); lfo.frequency.value=0.07; lg.gain.value=120;
   lfo.connect(lg).connect(flt.frequency);
-  o1.connect(flt);o2.connect(flt);flt.connect(g).connect(AC.destination);
-  o1.start();o2.start();lfo.start(); padNodes={o1,o2,lfo,g}; }
-function stopPad(){ if(!padNodes)return; try{padNodes.g.gain.linearRampToValueAtTime(0.0001,AC.currentTime+.6);
+  o1.connect(flt);o2.connect(flt);flt.connect(g).connect(MG);
+  o1.start();o2.start();lfo.start(); padNodes={o1,o2,lfo,g};
+  startEngine(); }
+function stopPad(){ stopEngine();
+  if(!padNodes)return; try{padNodes.g.gain.linearRampToValueAtTime(0.0001,AC.currentTime+.6);
   setTimeout(()=>{try{padNodes.o1.stop();padNodes.o2.stop();padNodes.lfo.stop();}catch(e){} padNodes=null;},700);}catch(e){padNodes=null;} }
 $("#btnMute").textContent=muted?"🔇":"🔊";
 $("#btnMute").addEventListener("click",e=>{ e.stopPropagation(); muted=!muted;
@@ -526,7 +591,8 @@ function resize(){ DPR=Math.min(2,window.devicePixelRatio||1);
 window.addEventListener("resize",resize); resize();
 
 // ---------- 도로/트랙 ----------
-const SEG_LEN=200, ROAD_W=1100, DRAW=70, CAM_H=420;
+const SEG_LEN=200, ROAD_W=1100, CAM_H=420;
+let DRAW=localStorage.getItem("mr_low")==="1"?46:70;
 const FOV=100, CAM_DEPTH=1/Math.tan((FOV/2)*Math.PI/180);
 const PLAYER_Z=CAM_H*CAM_DEPTH;
 let TOTAL=1700;
@@ -632,25 +698,69 @@ let steerDir=0, autoLane=null;
 let gameT=0;
 let activeGate=null, activeZone=null, forcedBreath=null, emotionEv=null;
 let classTotal=0, classBots=[];
+let heatLog=[], logT=0;
 let starField=[];
 function makeStars(){ starField=[]; for(let i=0;i<130;i++)
   starField.push({x:Math.random(),y:Math.random()*0.46,r:rand(.5,1.7),p:Math.random()*6}); }
 makeStars();
 
 function newStats(){ return {ff:0, hits:0, dodged:0, forced:0,
-  breathMatch:0, breathTotal:0, forks:[], quizzes:[], emotions:[]}; }
+  breathMatch:0, breathTotal:0, forks:[], quizzes:[], emotions:[], wrong:{}}; }
+
+// ---------- Firebase 우리 반 실연동 (교실 코드 없으면 데모 시뮬레이션) ----------
+const FB_CONFIG={apiKey:"AIzaSyAPjRhpGsBiILOk4xIO6qdwU5deE556nis",authDomain:"mind-jump.firebaseapp.com",
+  projectId:"mind-jump",storageBucket:"mind-jump.firebasestorage.app",
+  messagingSenderId:"640879942374",appId:"1:640879942374:web:072026fb598ddc39777927"};
+let db=null, fbTried=false, roomCode=null, roomUnsub=null, roomCount=0, roomOthersFF=0, pushT=0;
+const riderId=localStorage.getItem("mr_rid")||(()=>{
+  const v="r"+Math.random().toString(36).slice(2,10); localStorage.setItem("mr_rid",v); return v;})();
+let riderName="";
+function loadScript(src){return new Promise((ok,err)=>{
+  const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=err; document.head.appendChild(s);});}
+async function initFB(){
+  if(db)return db; if(fbTried)return db; fbTried=true;
+  try{
+    if(!window.firebase){
+      await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+      await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js");
+    }
+    firebase.initializeApp(FB_CONFIG); db=firebase.firestore();
+  }catch(e){ db=null; }
+  return db;
+}
+function subscribeRoom(){
+  if(!db||!roomCode)return;
+  if(roomUnsub){try{roomUnsub();}catch(e){}}
+  roomUnsub=db.collection("rooms").doc(roomCode).collection("riders").onSnapshot(snap=>{
+    let sum=0,n=0;
+    snap.forEach(d=>{ n++; if(d.id!==riderId) sum+=(d.data().ff||0); });
+    roomOthersFF=sum; roomCount=n;
+  },()=>{});
+}
+function pushRider(final){
+  if(!db||!roomCode||!stats)return;
+  const sync=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):0;
+  db.collection("rooms").doc(roomCode).collection("riders").doc(riderId).set({
+    name:riderName||"라이더", ff:stats.ff, hits:stats.hits,
+    prog:Math.min(100,Math.round(position/trackLen*100)), done:!!final,
+    grade:final?(lastGrade?lastGrade.key:null):null, sync,
+    wrong:stats.wrong||{}, game:"mind-ride",
+    ts:firebase.firestore.FieldValue.serverTimestamp()
+  },{merge:true}).catch(()=>{});
+}
 
 // ---------- 진행/이벤트 ----------
 function startRide(cls){
   classMode=cls; buildTrack(pendingCourse);
   position=0; speed=0; playerX=0; heat=20; tsCur=1; tsTarget=1;
-  stats=newStats(); shake=0; hitFlash=0; gameT=0;
+  stats=newStats(); shake=0; hitFlash=0; gameT=0; heatLog=[]; logT=0;
   activeGate=null; activeZone=null; forcedBreath=null; emotionEv=null; autoLane=null;
   classTotal=0; classBots=Array.from({length:24},()=>({next:rand(1,8)}));
   boost=false; breathHeld=false;
   $("#hud").classList.remove("hidden");
   $("#pillClass").classList.toggle("hidden",!classMode);
   $("#btnBreath").classList.remove("hidden"); $("#btnBoost").classList.remove("hidden");
+  $("#btnPause").classList.remove("hidden");
   $("#touchL").classList.remove("hidden"); $("#touchR").classList.remove("hidden");
   hideAllScreens();
   state="countdown"; let n=3;
@@ -682,7 +792,9 @@ function updateEvents(){
       else if(ev.type==="quiz"&&p>=ev.seg) resolveQuiz(ev);
       else if(ev.type==="emotion"&&p>=ev.seg) openEmotion(ev);
       else if(ev.type==="breath"){
-        if(p>=ev.seg&&p<ev.seg+ev.len){ if(!activeZone){activeZone=ev; $("#breathMini").classList.remove("hidden");} }
+        if(p>=ev.seg&&p<ev.seg+ev.len){ if(!activeZone){activeZone=ev;
+          ev._m=stats.breathMatch; ev._t=stats.breathTotal;
+          $("#breathMini").classList.remove("hidden");} }
         else if(p>=ev.seg+ev.len){ closeBreathZone(ev); }
       }
       else if(ev.type==="dodge"&&p>=ev.seg+50) ev.state="done";
@@ -742,6 +854,7 @@ function resolveQuiz(ev){ ev.state="done"; activeGate=null; autoLane=null; tsTar
   if(correct){ heat=clamp(heat-8,0,100); stats.ff+=5; sfx.good();
     showMsg(`🏷️ 정답! ${ev.data.tip}`,2600); }
   else { heat=clamp(heat+8,0,100); sfx.bad();
+    stats.wrong[ev.data.answer]=(stats.wrong[ev.data.answer]||0)+1;
     showMsg(`🏷️ 정답은 <b>${ev.data.answer}</b> — ${ev.data.tip}`,2800); }
   setTimeout(()=>{ $("#qBanner").classList.add("hidden"); $("#laneCards").classList.add("hidden"); },1500);
 }
@@ -771,8 +884,15 @@ function answerEmotion(ev,opt,btn){
 // --- 호흡 존 ---
 function closeBreathZone(ev){ ev.state="done";
   if(activeZone===ev){ activeZone=null; $("#breathMini").classList.add("hidden");
-    const pct=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):0;
-    showMsg(`🌬️ 호흡 존 통과 — 싱크 ${pct}%`,2000); } }
+    const zt=Math.max(0.001,stats.breathTotal-(ev._t||0));
+    const zs=(stats.breathMatch-(ev._m||0))/zt;
+    if(zs>=0.9){ // 히든: 완벽한 호흡 → 무지개 반딧불이
+      const base=playerSeg()+8;
+      for(let k=0;k<8;k++) addSprite(base+k*3,"ff",Math.sin(k*1.1)*0.4,{rainbow:true,val:3});
+      showMsg(`🌈 완벽한 호흡(${Math.round(zs*100)}%)! 무지개 반딧불이 출현!`,2400);
+    } else {
+      showMsg(`🌬️ 호흡 존 통과 — 싱크 ${Math.round(zs*100)}%`,2000);
+    } } }
 
 // --- 과열 강제 정지 ---
 function triggerForced(){
@@ -799,17 +919,19 @@ function finishRide(){
   if(state==="results")return;
   state="results"; stopPad(); sfx.finish();
   $("#hud").classList.add("hidden"); $("#btnBreath").classList.add("hidden");
-  $("#btnBoost").classList.add("hidden");
+  $("#btnBoost").classList.add("hidden"); $("#btnPause").classList.add("hidden");
   $("#touchL").classList.add("hidden"); $("#touchR").classList.add("hidden");
   $("#breathMini").classList.add("hidden"); $("#qBanner").classList.add("hidden");
   $("#laneCards").classList.add("hidden");
   buildResults();
+  pushRider(true);
   $("#resultsScreen").classList.remove("hidden");
 }
 
 // ---------- 업데이트 ----------
 const CRUISE=3000, VBOOST=3950, VMAX=VBOOST, VBREATH=1350;
 function update(dt){
+  if(state==="paused")return;
   tsCur+=(tsTarget-tsCur)*clamp(dt*4,0,1);
   const wdt=dt*tsCur;
   gameT+=dt;
@@ -855,7 +977,13 @@ function update(dt){
     if(boost&&!breathHeld) heat+=dt*2.2;
     if(breathHeld) heat-=dt*7;
     heat=clamp(heat,0,100);
+    logT+=dt; if(logT>=2){ logT=0; heatLog.push(heat); }
     if(heat>=100&&!activeGate&&!activeZone) { triggerForced(); return; }
+  }
+  // 엔진음 (속도 연동)
+  if(engine&&AC){
+    engine.o.frequency.setTargetAtTime(38+(speed/VMAX)*60,AC.currentTime,0.1);
+    engine.g.gain.setTargetAtTime(riding?(0.012+(boost?0.011:0)):0.005,AC.currentTime,0.2);
   }
 
   // 충돌/수집
@@ -870,8 +998,8 @@ function update(dt){
           sp.passed=true;
           if(sp.type==="ff"){
             const ok = !sp.bonus || breathOk;
-            if(ok&&Math.abs(sp.off-playerX)<0.32){ sp.dead=true; stats.ff++;
-              sp.bonus?sfx.bonus():sfx.collect(); }
+            if(ok&&Math.abs(sp.off-playerX)<0.32){ sp.dead=true; stats.ff+=(sp.val||1);
+              (sp.bonus||sp.rainbow)?sfx.bonus():sfx.collect(); }
           } else if(sp.type==="obs"){
             if(Math.abs(sp.off-playerX)<0.3){ sp.dead=true; stats.hits++;
               heat=clamp(heat+14,0,100); shake=Math.max(shake,9); hitFlash=1; sfx.hit();
@@ -883,9 +1011,14 @@ function update(dt){
     }
   }
 
-  // 반 시뮬레이션
+  // 우리 반: 실연동(교실 코드) 또는 데모 시뮬레이션
   if(riding&&classMode){
-    for(const b of classBots){ b.next-=dt; if(b.next<=0){ classTotal++; b.next=rand(2.2,6.5); } }
+    if(roomCode){
+      classTotal=roomOthersFF;
+      pushT+=dt; if(pushT>5){ pushT=0; pushRider(false); }
+    } else {
+      for(const b of classBots){ b.next-=dt; if(b.next<=0){ classTotal++; b.next=rand(2.2,6.5); } }
+    }
   }
 
   if(riding) updateEvents();
@@ -1011,7 +1144,7 @@ function render(){
           ctx.fillStyle=sp.col.rim; ctx.beginPath(); ctx.arc(sx,p.y,Math.max(0.6,r),0,7); ctx.fill(); ctx.globalAlpha=1; } }
       else if(sp.type==="ff"){ const r=Math.min(Math.max(2,p.scale*58*HH),H*0.03);
           const dim=sp.bonus&&!(activeZone&&breathHeld);
-          drawFF(sx,p.y-r*2.2+Math.sin(gameT*3+sp.bob)*r*0.7,r,a*(dim?0.3:1),sp.bonus); }
+          drawFF(sx,p.y-r*2.2+Math.sin(gameT*3+sp.bob)*r*0.7,r,a*(dim?0.3:1),sp.bonus,sp.rainbow?sp.bob:null); }
       else if(sp.type==="obs"){ const r=Math.max(2,p.scale*95*HH); drawObs(sx,p.y,r,a,sp.label,n); }
       else if(sp.type==="arch"){ const wpx=sp.w*p.w, hpx=wpx*(sp.finish?0.55:0.95);
           drawArch(sx,p.y,wpx,hpx,sp.col,a,sp.finish); }
@@ -1027,7 +1160,7 @@ function render(){
 
   // 스피드 스트릭
   const spN=clamp(speed/VMAX,0,1);
-  if(spN>0.55&&calmGlow<0.5&&state==="ride"){
+  if(spN>0.55&&calmGlow<0.5&&state==="ride"&&DRAW>46){
     ctx.strokeStyle=`rgba(190,225,255,${(spN-0.55)*0.35})`; ctx.lineWidth=1.4;
     for(let i=0;i<22;i++){ const ang=Math.random()*Math.PI*2, r1=rand(H*0.28,H*0.5), len=rand(20,90)*spN;
       ctx.beginPath(); ctx.moveTo(HW+Math.cos(ang)*r1,HH+Math.sin(ang)*r1);
@@ -1091,13 +1224,18 @@ function drawShroom(x,y,h,col,seed,a){
       ctx.beginPath(); ctx.arc(px,cy-capH*0.2*(i%2?1:-0.4),Math.max(0.8,h*0.02),0,7); ctx.fill(); } }
   ctx.globalAlpha=1;
 }
-function drawFF(x,y,r,a,bonus){
+function drawFF(x,y,r,a,bonus,rainbowSeed){
   ctx.globalAlpha=a;
-  const c=bonus?"56,212,255":"63,229,160";
   let g=ctx.createRadialGradient(x,y,0,x,y,r*3);
-  g.addColorStop(0,`rgba(${c},.85)`); g.addColorStop(0.35,`rgba(${c},.30)`); g.addColorStop(1,`rgba(${c},0)`);
+  if(rainbowSeed!==null&&rainbowSeed!==undefined){
+    const h=(gameT*140+rainbowSeed*60)%360;
+    g.addColorStop(0,`hsla(${h},95%,70%,.9)`); g.addColorStop(0.35,`hsla(${(h+60)%360},95%,65%,.35)`); g.addColorStop(1,`hsla(${(h+120)%360},95%,60%,0)`);
+  } else {
+    const c=bonus?"56,212,255":"63,229,160";
+    g.addColorStop(0,`rgba(${c},.85)`); g.addColorStop(0.35,`rgba(${c},.30)`); g.addColorStop(1,`rgba(${c},0)`);
+  }
   ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r*3,0,7); ctx.fill();
-  ctx.fillStyle="#eafff4"; ctx.beginPath(); ctx.arc(x,y,Math.max(1,r*0.55),0,7); ctx.fill();
+  ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(x,y,Math.max(1,r*0.55),0,7); ctx.fill();
   ctx.globalAlpha=1;
 }
 function drawObs(x,y,r,a,label,n){
@@ -1264,7 +1402,9 @@ function buildResults(){
   const row=$("#shroomRow"); row.innerHTML="";
   for(let i=0;i<10;i++){ const s=document.createElement("span"); s.textContent="🍄"; row.appendChild(s); }
   $("#forestPct").textContent=classMode
-    ?`친구 24명(데모)과 함께 숲의 ${pctV}%를 밝혔어요 — 혼자서는 불가능한 밝기!`
+    ?(roomCode
+      ?`우리 반 ${Math.max(roomCount,1)}명과 함께 숲의 ${pctV}%를 밝혔어요 — 혼자서는 불가능한 밝기!`
+      :`친구 24명(데모)과 함께 숲의 ${pctV}%를 밝혔어요 — 혼자서는 불가능한 밝기!`)
     :`숲의 ${pctV}%를 밝혔어요. 우리 반 모드에선 친구들과 함께 더 밝힐 수 있어요!`;
   setTimeout(()=>{ $("#forestFill").style.width=pctV+"%";
     [...row.children].forEach((s,i)=>{ if(i<Math.round(pctV/10)) setTimeout(()=>s.classList.add("lit"),i*140); });},100);
@@ -1281,9 +1421,57 @@ function buildResults(){
   fillRecap("#recapEmo",stats.emotions,e=>({ok:e.correct,
     html:`<span class="sit">${e.scene}</span>내 답: <b>${e.chosen}</b> ${e.correct?OKMARK:`→ 더 가까운 이름: <b>${e.answer}</b>`}`}));
   $("#encourage").textContent="🌙 "+pick(ENCOURAGE);
-  // 개인 최고 기록
-  const best=Math.max(stats.ff, +(localStorage.getItem("mr_best")||0));
-  localStorage.setItem("mr_best",best);
+  // 히든 엔딩: 골드 + 무피격 + 무과열
+  if(lastGrade.key==="gold"&&stats.hits===0&&stats.forced===0){
+    $("#encourage").textContent="🌌 PERFECT NIGHT — 어떤 생각에도 부딪히지 않은 완벽한 밤. 오늘의 평온을 오래 기억하세요.";
+    $("#medalName").textContent+=" · PERFECT";
+  }
+  // 온도 흐름 그래프
+  setTimeout(drawSpark,120);
+  // 개인 기록 저장 (최고·누적·최근 10회)
+  const prevBest=+(localStorage.getItem("mr_best")||0);
+  if(stats.ff>prevBest){ localStorage.setItem("mr_best",stats.ff);
+    if(prevBest>0) $("#medalName").textContent+=" · 신기록!"; }
+  localStorage.setItem("mr_total", (+(localStorage.getItem("mr_total")||0))+stats.ff);
+  try{
+    const hist=JSON.parse(localStorage.getItem("mr_hist")||"[]");
+    hist.push({d:new Date().toISOString().slice(0,10), ff:stats.ff,
+      sync:sync===null?0:sync, grade:lastGrade.key});
+    localStorage.setItem("mr_hist",JSON.stringify(hist.slice(-10)));
+  }catch(e){}
+  updateTitleRecord();
+}
+function drawSpark(){
+  const cnv=$("#heatSpark"); if(!cnv)return;
+  const w=cnv.clientWidth||520, h=90;
+  cnv.width=w*2; cnv.height=h*2;
+  const g=cnv.getContext("2d"); g.scale(2,2);
+  const data=heatLog.length>1?heatLog:[20,heat];
+  const max=Math.max(...data), avg=data.reduce((a,b)=>a+b,0)/data.length;
+  // 과열선
+  g.strokeStyle="rgba(255,59,92,.3)"; g.setLineDash([4,4]); g.lineWidth=1;
+  g.beginPath(); g.moveTo(4,8); g.lineTo(w-4,8); g.stroke(); g.setLineDash([]);
+  // 영역
+  const px=i=>4+i/(data.length-1)*(w-8), py=v=>h-6-(v/100)*(h-14);
+  g.beginPath(); g.moveTo(px(0),h-4);
+  data.forEach((v,i)=>g.lineTo(px(i),py(v))); g.lineTo(px(data.length-1),h-4); g.closePath();
+  g.fillStyle="rgba(63,229,160,.10)"; g.fill();
+  // 선 (온도별 색)
+  const grd=g.createLinearGradient(0,0,0,h);
+  grd.addColorStop(0,"#ff3b5c"); grd.addColorStop(0.5,"#ffd75e"); grd.addColorStop(1,"#3FE5A0");
+  g.beginPath(); data.forEach((v,i)=>{ i?g.lineTo(px(i),py(v)):g.moveTo(px(i),py(v)); });
+  g.strokeStyle=grd; g.lineWidth=2.5; g.lineJoin="round"; g.stroke();
+  $("#sparkNote").textContent=`평균 ${avg.toFixed(0)}° · 최고 ${max.toFixed(0)}° · 과열 정지 ${stats.forced}회 — 온도가 치솟은 순간, 나는 무엇을 하고 있었나요?`;
+}
+function updateTitleRecord(){
+  const best=+(localStorage.getItem("mr_best")||0), tot=+(localStorage.getItem("mr_total")||0);
+  let hist=[]; try{hist=JSON.parse(localStorage.getItem("mr_hist")||"[]");}catch(e){}
+  const el=$("#myRecord");
+  if(!best&&!tot){ el.classList.add("hidden"); return; }
+  const M={gold:"🥇",silver:"🥈",bronze:"🥉"};
+  const recent=hist.slice(-5).map(r=>M[r.grade]||"·").join(" ");
+  el.innerHTML=`🏆 최고 <b style="color:var(--mint)">✦${best}</b> · 누적 ✦${tot}${recent?` · 최근 ${recent}`:""}`;
+  el.classList.remove("hidden");
 }
 
 // ---------- 오늘의 카드 PNG 저장 ----------
@@ -1374,6 +1562,7 @@ window.addEventListener("keydown",e=>{
   if(e.code==="ArrowRight"||e.code==="KeyD"){steerDir=1;autoLane=null;}
   if(e.code==="ArrowUp"||e.code==="KeyW"){ e.preventDefault(); boost=true; $("#btnBoost").classList.add("holding"); }
   if(e.code==="Space"){ e.preventDefault(); breathHeld=true; $("#btnBreath").classList.add("holding"); }
+  if(e.code==="Escape"||e.code==="KeyP"){ if(state==="ride"||state==="paused") togglePause(); }
 });
 window.addEventListener("keyup",e=>{
   if(e.code==="ArrowLeft"||e.code==="KeyA"){ if(steerDir<0)steerDir=0; }
@@ -1393,6 +1582,32 @@ bindHold($("#btnBreath"),()=>{breathHeld=true;$("#btnBreath").classList.add("hol
 bindHold($("#btnBoost"),()=>{boost=true;$("#btnBoost").classList.add("holding");},
   ()=>{boost=false;$("#btnBoost").classList.remove("holding");});
 
+// ---------- 일시정지 · 설정 ----------
+function togglePause(){
+  if(state==="ride"){ state="paused"; $("#pauseOverlay").classList.remove("hidden"); }
+  else if(state==="paused"){ state="ride"; $("#pauseOverlay").classList.add("hidden"); }
+}
+$("#btnPause").addEventListener("click",e=>{e.stopPropagation();togglePause();});
+$("#btnResume").addEventListener("click",togglePause);
+$("#btnQuit").addEventListener("click",()=>{
+  $("#pauseOverlay").classList.add("hidden");
+  state="attract"; stopPad();
+  ["#hud","#btnBreath","#btnBoost","#btnPause","#touchL","#touchR","#breathMini","#qBanner","#laneCards"]
+    .forEach(s=>$(s).classList.add("hidden"));
+  buildTrack(); position=0; playerX=0;
+  $("#titleScreen").classList.remove("hidden"); updateTitleRecord();
+});
+const volS=$("#volSlider");
+volS.value=Math.round((+(localStorage.getItem("mr_vol")??0.8))*100);
+volS.addEventListener("input",()=>{ const v=volS.value/100;
+  localStorage.setItem("mr_vol",v); if(MG)MG.gain.value=v; });
+$("#chkVib").checked=vibOn;
+$("#chkVib").addEventListener("change",e=>{ vibOn=e.target.checked;
+  localStorage.setItem("mr_vib",vibOn?"1":"0"); });
+$("#chkLow").checked=localStorage.getItem("mr_low")==="1";
+$("#chkLow").addEventListener("change",e=>{ const on=e.target.checked;
+  localStorage.setItem("mr_low",on?"1":"0"); DRAW=on?46:70; });
+
 // ---------- 화면 전환 ----------
 let pendingClass=false, pendingCourse="class";
 document.querySelectorAll(".cbtn").forEach(b=>b.addEventListener("click",()=>{
@@ -1400,12 +1615,26 @@ document.querySelectorAll(".cbtn").forEach(b=>b.addEventListener("click",()=>{
   b.classList.add("active"); pendingCourse=b.dataset.course;
 }));
 $("#btnSolo").addEventListener("click",()=>{initAudio();pendingClass=false;
-  $("#classNote").classList.add("hidden"); $("#titleScreen").classList.add("hidden");
+  $("#classNote").classList.add("hidden"); $("#roomJoin").classList.add("hidden");
+  $("#titleScreen").classList.add("hidden");
   $("#howtoScreen").classList.remove("hidden");});
 $("#btnClass").addEventListener("click",()=>{initAudio();pendingClass=true;
-  $("#classNote").classList.remove("hidden"); $("#titleScreen").classList.add("hidden");
+  $("#classNote").classList.remove("hidden"); $("#roomJoin").classList.remove("hidden");
+  $("#titleScreen").classList.add("hidden");
   $("#howtoScreen").classList.remove("hidden");});
-$("#btnGo").addEventListener("click",()=>{initAudio();startWithIntro();});
+$("#btnGo").addEventListener("click",()=>{initAudio();
+  if(pendingClass){
+    roomCode=($("#inpRoom").value||"").trim().toUpperCase()||null;
+    riderName=($("#inpName").value||"").trim();
+    if(roomCode) initFB().then(d=>{
+      if(d){ subscribeRoom(); }
+      else { roomCode=null; showMsg("연결 실패 — 데모 모드로 달립니다",2200); }
+    });
+  } else roomCode=null;
+  startWithIntro();});
+// URL ?room=CODE 로 들어오면 교실 코드 자동 입력
+const qRoom=new URLSearchParams(location.search).get("room");
+if(qRoom) $("#inpRoom").value=qRoom.toUpperCase();
 function startWithIntro(){
   if(sessionStorage.getItem("mr_intro")==="1"){ startRide(pendingClass); return; }
   const ov=$("#introOverlay"), v=$("#introVid");
@@ -1427,6 +1656,7 @@ $("#btnHome").addEventListener("click",()=>{
 
 // ---------- 메인 루프 ----------
 buildTrack();
+updateTitleRecord();
 let lastT=performance.now();
 function loop(now){
   const dt=clamp((now-lastT)/1000,0,0.05); lastT=now;
