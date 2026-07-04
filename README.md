@@ -53,7 +53,7 @@
 
 ## 남은 일
 
-- [ ] Firebase 실시간 반 모드 + 교사 발표모드(teacher.html)
-- [ ] 콘텐츠 풀 확장 (교사 검수 포함)
-- [ ] GitHub Pages 배포 (cleveranawim-source)
-- [ ] 난이도 튜닝 (온도 상승 속도, 코스 길이)
+- [x] Firebase 실시간 반 모드 + 교사 발표모드(teacher.html) — Firestore 경로 `rooms/{code}/riders`
+- [x] 콘텐츠 풀 확장 (content.js — 교사 검수/수정용)
+- [x] GitHub Pages 배포: https://cleveranawim-source.github.io/mind-rider/ (교사: /teacher.html)
+- [x] 코스 2종·등급·오늘의 카드·개인 기록·일시정지/설정
