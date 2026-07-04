@@ -161,6 +161,8 @@
   #inpRoom{text-transform:uppercase;letter-spacing:.15em}
   .rjHint{font-size:12px;color:var(--dim);margin-top:6px}
   .courseSel{display:flex;gap:10px;margin-bottom:16px}
+  .themeSel{flex-wrap:wrap;gap:8px}
+  .themeSel .cbtn{flex:1 1 44%;min-width:0}
   .cbtn{flex:1;padding:12px 8px;border-radius:10px;border:1.5px solid rgba(255,255,255,.18);
     background:rgba(255,255,255,.05);color:var(--dim);font-family:inherit;font-weight:800;
     font-size:15px;cursor:pointer;display:flex;flex-direction:column;gap:3px;align-items:center;transition:all .15s}
@@ -346,7 +348,7 @@
     </svg>
     <img id="emoBugImg" class="hidden" alt=""
       style="display:block;margin:0 auto 10px;height:110px;filter:drop-shadow(0 0 20px rgba(63,229,160,.55))">
-    <h3>이 마음의 이름은? — 가장 가까운 감정 하나</h3>
+    <h3 id="emoTitleTxt">이 마음의 이름은? — 가장 가까운 감정 하나</h3>
     <div class="scene" id="emoScene"></div>
     <div class="chips" id="emoChips"></div>
     <div class="note" id="emoNote"></div>
@@ -406,9 +408,11 @@
       </div>
       <div class="rjHint">코드가 없으면 비워두세요 — 데모 모드로 달립니다.</div>
     </div>
-    <div class="courseSel">
+    <div class="courseSel themeSel">
       <button class="cbtn active" data-theme="night">🌃 밤의 숲<small>감정 조절</small></button>
       <button class="cbtn" data-theme="sea">🌊 새벽 바다<small>불안 다루기</small></button>
+      <button class="cbtn" data-theme="alley">🏮 노을 등불 골목<small>타인 이해</small></button>
+      <button class="cbtn" data-theme="city">🌆 도시의 밤 별빛 길<small>공동체</small></button>
     </div>
     <div class="courseSel">
       <button class="cbtn active" data-course="class">🏫 수업 코스<small>약 3분</small></button>
@@ -628,9 +632,11 @@ $("#btnMute").addEventListener("click",e=>{ e.stopPropagation(); muted=!muted;
 // ---------- 실사 에셋 (없으면 자동으로 기존 그래픽 폴백) ----------
 const ASSET_SRC={sky:"assets/sky.webp",bar:"assets/handlebar.webp",shroom:"assets/mushroom.webp",
   obs:"assets/obstacle.webp",bug:"assets/insect.webp",intro:"assets/intro.mp4",
-  seaSky:"assets/sea_sky.webp",jelly:"assets/jelly.webp"};
+  seaSky:"assets/sea_sky.webp",jelly:"assets/jelly.webp",
+  alleySky:"assets/alley_sky.webp",lantern:"assets/lantern.webp",
+  citySky:"assets/city_sky.webp",lamp:"assets/lamp.webp"};
 const IMGS={};
-let shroomVars=null, jellyVars=null;
+let shroomVars=null, jellyVars=null, lanternVars=null, lampVars=null;
 function makeVariants(im,hues){
   return hues.map(h=>{
     const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
@@ -643,6 +649,8 @@ function loadAssets(){
     im.onload=()=>{ IMGS[k]=im;
       if(k==="shroom") shroomVars=makeVariants(im,[0,170,230,-50]);
       if(k==="jelly") jellyVars=makeVariants(im,[0,45,-45,170]);
+      if(k==="lantern") lanternVars=makeVariants(im,[0,25,-25,60]);
+      if(k==="lamp") lampVars=makeVariants(im,[0,20,-25,190]);
       if(k==="bug"){ const el=$("#emoBugImg"); el.src=ASSET_SRC.bug;
         el.classList.remove("hidden"); $("#emoBug").classList.add("hidden"); } };
     im.src=ASSET_SRC[k];
@@ -653,9 +661,17 @@ loadAssets();
 // ---------- 테마 (세계·문항 풀 교체) ----------
 const THEMES={
   night:{name:"밤의 숲", skyKey:"sky", vars:()=>shroomVars,
-    ground:[[10,18,32],[16,26,48]], road:[[16,24,42],[18,28,50]], edge:"63,229,160"},
+    ground:[[10,18,32],[16,26,48]], road:[[16,24,42],[18,28,50]], edge:"63,229,160",
+    storm:"생각의 폭풍", emoTitle:"이 마음의 이름은? — 가장 가까운 감정 하나"},
   sea:{name:"새벽 바다", skyKey:"seaSky", vars:()=>jellyVars,
-    ground:[[9,15,30],[20,26,46]], road:[[13,20,38],[17,26,48]], edge:"56,212,255"}
+    ground:[[9,15,30],[20,26,46]], road:[[13,20,38],[17,26,48]], edge:"56,212,255",
+    storm:"걱정의 폭풍", emoTitle:"이 마음의 이름은? — 가장 가까운 감정 하나"},
+  alley:{name:"노을 등불 골목", skyKey:"alleySky", vars:()=>lanternVars,
+    ground:[[26,16,22],[48,28,32]], road:[[22,16,26],[36,24,34]], edge:"255,150,110",
+    storm:"소문의 폭풍", emoTitle:"친구의 마음 읽기 — 가장 가까운 감정 하나"},
+  city:{name:"도시의 밤 별빛 길", skyKey:"citySky", vars:()=>lampVars,
+    ground:[[10,12,24],[22,20,38]], road:[[15,16,30],[22,22,40]], edge:"255,210,120",
+    storm:"냉소의 안개", emoTitle:"이 마음의 이름은? — 가장 가까운 감정 하나"}
 };
 let themeCur="night";
 
@@ -688,8 +704,9 @@ const PLANS={
   free:{seq:["dodge","fork","quiz","breath","emotion","dodge","fork","quiz","dodge","breath","fork","emotion","quiz","storm","fork","breath","quiz","emotion"]}
 };
 function poolsFor(){
-  if(themeCur==="sea"&&_CP.sea)
-    return {T:_CP.sea.thoughts,F:_CP.sea.forks,Q:QUIZZES,E:_CP.sea.emotions};
+  const tp=(themeCur!=="night")?_CP[themeCur]:null;
+  if(tp) return {T:tp.thoughts||THOUGHTS, F:tp.forks||FORKS,
+                 Q:tp.quizzes||QUIZZES, E:tp.emotions||EMOTIONS};
   return {T:THOUGHTS,F:FORKS,Q:QUIZZES,E:EMOTIONS};
 }
 
@@ -884,7 +901,7 @@ function updateEvents(){
       else if(ev.type==="emotion"&&p>=ev.seg-26){ ev.state="active"; tsTarget=0.22; showMsg("💠 빛의 곤충이 다가온다…",1500); }
       else if(ev.type==="breath"&&p>=ev.seg-18){ ev.state="active"; showMsg("🌬️ 호흡 존 진입 — 리듬에 맞춰 숨쉬기",1900); }
       else if(ev.type==="storm"&&p>=ev.seg-24){ ev.state="active";
-        showMsg("⛈️ 생각의 폭풍! <b>숨을 고르면(꾹)</b> 뚫고 지나갈 수 있다",2600); }
+        showMsg(`⛈️ ${THEMES[themeCur].storm}! <b>숨을 고르면(꾹)</b> 뚫고 지나갈 수 있다`,2600); }
       else if(ev.type==="dodge"&&p>=ev.seg-24){ ev.state="active"; showMsg("⚠️ 생각 덩어리 주의!",1400); }
     }
     if(ev.state==="active"){
@@ -967,6 +984,7 @@ function resolveQuiz(ev){ ev.state="done"; activeGate=null; autoLane=null; tsTar
 
 // --- 감정 이름 붙이기 ---
 function openEmotion(ev){ ev.state="done"; emotionEv=ev; state="emotion"; tsTarget=0; tsCur=0;
+  $("#emoTitleTxt").textContent=THEMES[themeCur].emoTitle;
   $("#emoScene").textContent=ev.data.scene;
   const box=$("#emoChips"); box.innerHTML=""; $("#emoNote").textContent="";
   shuffle(ev.data.options).forEach(opt=>{
