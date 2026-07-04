@@ -1431,9 +1431,10 @@ function drawHandlebar(){
   ctx.translate(cx,cy); ctx.rotate(lean); ctx.translate(-cx,-cy);
   if(IMGS.bar){
     const im=IMGS.bar;
-    const crop=0.62;                         // 이미지 상단 62%만 사용(하단 포크 제거)
+    const crop=0.80;                         // 이미지 상단 80% 사용 — 오토바이 몸체까지 보이게
     const srcH=im.height*crop, ar=im.width/srcH;
-    const bw=Math.min(W*1.02, H*0.30*ar);    // 높이 30% 상한 — 시야 확보
+    // 화면 높이 36% 기준, 화면 폭의 60%~100% 사이로 클램프 (태블릿 가로에서도 안정)
+    const bw=clamp(H*0.36*ar, W*0.6, W*1.0);
     const bh=bw/ar, by=H-bh;
     ctx.drawImage(im,0,0,im.width,srcH, cx-bw/2,by,bw,bh);
     drawGauge(cx, by+bh*(BAR.gy/crop), bh*(BAR.gr/crop));
