@@ -254,6 +254,12 @@
     background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
     border-radius:999px;padding:8px 18px}
   #heatSpark{width:100%;height:90px;display:block}
+  .noteRow{display:flex;gap:8px}
+  .noteRow input{flex:1;background:rgba(255,255,255,.06);border:1.5px solid rgba(63,229,160,.4);
+    border-radius:10px;padding:12px;color:var(--ink);font-family:inherit;font-size:15px;
+    font-weight:700;outline:none;min-width:0}
+  .noteRow input:focus{border-color:var(--mint)}
+  .noteRow .btn{padding:12px 16px;font-size:14px}
   .sparkNote{font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.5}
 
   /* ---------- 인트로 시네마틱 ---------- */
@@ -387,8 +393,12 @@
       <div class="rjHint">코드가 없으면 비워두세요 — 데모 모드로 달립니다.</div>
     </div>
     <div class="courseSel">
-      <button class="cbtn active" data-course="class">🏫 수업 코스<small>약 3분 · 과제 14개</small></button>
-      <button class="cbtn" data-course="free">🌌 탐험 코스<small>약 5분 · 과제 18개</small></button>
+      <button class="cbtn active" data-theme="night">🌃 밤의 숲<small>감정 조절</small></button>
+      <button class="cbtn" data-theme="sea">🌊 새벽 바다<small>불안 다루기</small></button>
+    </div>
+    <div class="courseSel">
+      <button class="cbtn active" data-course="class">🏫 수업 코스<small>약 3분</small></button>
+      <button class="cbtn" data-course="free">🌌 탐험 코스<small>약 5분</small></button>
     </div>
     <div class="howItem"><span class="ic">🏍️</span><div><b>← →</b> 방향키 또는 <b>화면 왼쪽/오른쪽 터치</b>로 방향을 잡아요.</div></div>
     <div class="howItem"><span class="ic">🔥</span><div><b>↑ / 부스트 버튼(꾹)</b>으로 가속! 더 빨리 달리는 대신 <b>마음 온도가 빨리 올라요</b>. 호흡과 번갈아 쓰는 게 요령.</div></div>
@@ -417,7 +427,16 @@
     <div class="recap" id="recapQuiz"><h4>🏷️ 생각에 이름표 붙이기 (인지왜곡)</h4><ul></ul></div>
     <div class="recap" id="recapEmo"><h4>💠 감정 이름 붙이기</h4><ul></ul></div>
     <div class="encourage" id="encourage"></div>
+    <div class="recap" id="noteBox">
+      <h4>💬 오늘 나에게 남은 문장 하나</h4>
+      <div class="noteRow">
+        <input id="inpNote" maxlength="60" placeholder="예: 속도를 줄여도 지는 게 아니다">
+        <button class="btn secondary" id="btnNote">남기기</button>
+      </div>
+      <div class="rjHint" id="noteDone"></div>
+    </div>
     <div class="btnRow" style="width:100%;align-items:center">
+      <button class="btn ghost hidden" id="btnPropose" style="width:min(86vw,340px)">✏️ 우리 반 갈림길 문항 제안하기</button>
       <button class="btn secondary" id="btnCard" style="width:min(86vw,340px)">📸 오늘의 카드 저장</button>
       <button class="btn primary" id="btnAgain" style="width:min(86vw,340px)">다시 달리기</button>
       <button class="btn ghost" id="btnHome" style="width:min(86vw,340px)">처음으로</button>
@@ -512,7 +531,7 @@ const ENCOURAGE=[
  "감정에 정확한 이름을 붙이는 순간, 감정의 크기는 절반이 돼요."];
 
 // ---------- 오디오 ----------
-let AC=null, MG=null, muted=localStorage.getItem("mr_mute")==="1", padNodes=null, engine=null;
+let AC=null, MG=null, muted=localStorage.getItem("mr_mute")==="1", bgm=null, engine=null;
 let vibOn=localStorage.getItem("mr_vib")!=="0";
 function initAudio(){
   if(!AC){ try{
@@ -541,19 +560,51 @@ const sfx={
   bad(){tone(220,.25,"triangle",.14,170);},
   finish(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,.3,"sine",.11),i*130));}
 };
-function startPad(){ if(muted||!AC||padNodes)return;
-  const g=AC.createGain(); g.gain.value=0.028;
-  const flt=AC.createBiquadFilter(); flt.type="lowpass"; flt.frequency.value=260;
-  const o1=AC.createOscillator(),o2=AC.createOscillator();
-  o1.type="sine";o1.frequency.value=55; o2.type="sine";o2.frequency.value=82.5;
-  const lfo=AC.createOscillator(),lg=AC.createGain(); lfo.frequency.value=0.07; lg.gain.value=120;
-  lfo.connect(lg).connect(flt.frequency);
-  o1.connect(flt);o2.connect(flt);flt.connect(g).connect(MG);
-  o1.start();o2.start();lfo.start(); padNodes={o1,o2,lfo,g};
+// ---------- 제너레이티브 BGM (신스웨이브 · Am–F–C–G 루프) ----------
+const BGM_CHORDS=[[57,60,64],[53,57,60],[48,52,55],[55,59,62]];
+const midiF=m=>440*Math.pow(2,(m-69)/12);
+function startPad(){ if(muted||!AC||bgm)return;
+  const master=AC.createGain(); master.gain.value=0.0001;
+  const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1500;
+  master.connect(lp).connect(MG);
+  master.gain.linearRampToValueAtTime(0.17,AC.currentTime+2.5);
+  const dly=AC.createDelay(1); dly.delayTime.value=0.34;
+  const fb=AC.createGain(); fb.gain.value=0.34;
+  dly.connect(fb).connect(dly); dly.connect(master);
+  const BPM=74, spb=60/BPM;
+  function note(t,f,dur,type,vol,dest){
+    const o=AC.createOscillator(),v=AC.createGain();
+    o.type=type; o.frequency.value=f;
+    v.gain.setValueAtTime(0.0001,t);
+    v.gain.exponentialRampToValueAtTime(vol,t+0.03);
+    v.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(v).connect(dest||master); o.start(t); o.stop(t+dur+0.05);
+  }
+  const ARP=[0,1,2,1,0,2,1,2];
+  function schedBar(t,bar){
+    const ch=BGM_CHORDS[bar%4];
+    ch.forEach(m=>{ note(t,midiF(m),spb*4.1,"triangle",0.05);
+      note(t,midiF(m)+1.7,spb*4.1,"sine",0.032); });          // 패드(디튠)
+    note(t,midiF(ch[0]-24),spb*3.6,"sine",0.10);               // 베이스
+    note(t+spb*2,midiF(ch[0]-12),spb*1.5,"sine",0.045);
+    for(let i=0;i<8;i++){                                       // 아르페지오→딜레이
+      const m=ch[ARP[i]]+12+((bar%2&&i===7)?12:0);
+      note(t+i*spb/2,midiF(m),0.30,"sine",0.06,dly);
+    }
+  }
+  let bar=0, nextT=AC.currentTime+0.15;
+  const timer=setInterval(()=>{
+    if(!AC||!bgm)return;
+    while(nextT<AC.currentTime+1.2){ schedBar(nextT,bar++); nextT+=spb*4; }
+  },300);
+  bgm={master,dly,timer};
   startEngine(); }
 function stopPad(){ stopEngine();
-  if(!padNodes)return; try{padNodes.g.gain.linearRampToValueAtTime(0.0001,AC.currentTime+.6);
-  setTimeout(()=>{try{padNodes.o1.stop();padNodes.o2.stop();padNodes.lfo.stop();}catch(e){} padNodes=null;},700);}catch(e){padNodes=null;} }
+  if(!bgm)return;
+  clearInterval(bgm.timer);
+  try{bgm.master.gain.linearRampToValueAtTime(0.0001,AC.currentTime+0.8);}catch(e){}
+  const b=bgm; setTimeout(()=>{try{b.master.disconnect();}catch(e){}},1000);
+  bgm=null; }
 $("#btnMute").textContent=muted?"🔇":"🔊";
 $("#btnMute").addEventListener("click",e=>{ e.stopPropagation(); muted=!muted;
   localStorage.setItem("mr_mute",muted?"1":"0"); $("#btnMute").textContent=muted?"🔇":"🔊";
@@ -561,26 +612,37 @@ $("#btnMute").addEventListener("click",e=>{ e.stopPropagation(); muted=!muted;
 
 // ---------- 실사 에셋 (없으면 자동으로 기존 그래픽 폴백) ----------
 const ASSET_SRC={sky:"assets/sky.webp",bar:"assets/handlebar.webp",shroom:"assets/mushroom.webp",
-  obs:"assets/obstacle.webp",bug:"assets/insect.webp",intro:"assets/intro.mp4"};
+  obs:"assets/obstacle.webp",bug:"assets/insect.webp",intro:"assets/intro.mp4",
+  seaSky:"assets/sea_sky.webp",jelly:"assets/jelly.webp"};
 const IMGS={};
-let shroomVars=null;
-function makeShroomVariants(im){
-  // 핑크 원본 → 색상 회전으로 민트/시안/퍼플 변형 생성
-  shroomVars=[0,170,230,-50].map(h=>{
+let shroomVars=null, jellyVars=null;
+function makeVariants(im,hues){
+  return hues.map(h=>{
     const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
     const g=c.getContext("2d"); g.filter=h?`hue-rotate(${h}deg)`:"none"; g.drawImage(im,0,0); return c;});
 }
 function loadAssets(){
-  for(const k of ["sky","bar","shroom","obs","bug"]){
+  for(const k of Object.keys(ASSET_SRC)){
+    if(k==="intro")continue;
     const im=new Image();
     im.onload=()=>{ IMGS[k]=im;
-      if(k==="shroom") makeShroomVariants(im);
+      if(k==="shroom") shroomVars=makeVariants(im,[0,170,230,-50]);
+      if(k==="jelly") jellyVars=makeVariants(im,[0,45,-45,170]);
       if(k==="bug"){ const el=$("#emoBugImg"); el.src=ASSET_SRC.bug;
         el.classList.remove("hidden"); $("#emoBug").classList.add("hidden"); } };
     im.src=ASSET_SRC[k];
   }
 }
 loadAssets();
+
+// ---------- 테마 (세계·문항 풀 교체) ----------
+const THEMES={
+  night:{name:"밤의 숲", skyKey:"sky", vars:()=>shroomVars,
+    ground:[[10,18,32],[16,26,48]], road:[[16,24,42],[18,28,50]], edge:"63,229,160"},
+  sea:{name:"새벽 바다", skyKey:"seaSky", vars:()=>jellyVars,
+    ground:[[9,15,30],[20,26,46]], road:[[13,20,38],[17,26,48]], edge:"56,212,255"}
+};
+let themeCur="night";
 
 // ---------- 캔버스 ----------
 const cv=$("#game"), ctx=cv.getContext("2d");
@@ -598,11 +660,16 @@ const PLAYER_Z=CAM_H*CAM_DEPTH;
 let TOTAL=1700;
 let segments=[], events=[], trackLen=TOTAL*SEG_LEN, totalFF=0;
 
-// 코스 플랜: 이벤트 순서만 정의, 위치는 자동 배치
+// 코스 플랜: 이벤트 순서만 정의, 위치·총 길이는 자동 산출
 const PLANS={
-  class:{total:1700, seq:["dodge","fork","dodge","breath","quiz","emotion","dodge","fork","quiz","breath","emotion","dodge","fork","quiz"]},
-  free:{total:2900, seq:["dodge","fork","quiz","breath","emotion","dodge","fork","quiz","dodge","breath","fork","emotion","quiz","dodge","fork","breath","quiz","emotion"]}
+  class:{seq:["dodge","fork","dodge","breath","quiz","emotion","dodge","fork","quiz","breath","emotion","storm","fork","quiz"]},
+  free:{seq:["dodge","fork","quiz","breath","emotion","dodge","fork","quiz","dodge","breath","fork","emotion","quiz","storm","fork","breath","quiz","emotion"]}
 };
+function poolsFor(){
+  if(themeCur==="sea"&&_CP.sea)
+    return {T:_CP.sea.thoughts,F:_CP.sea.forks,Q:QUIZZES,E:_CP.sea.emotions};
+  return {T:THOUGHTS,F:FORKS,Q:QUIZZES,E:EMOTIONS};
+}
 
 const SHROOM_COLS=[
   {top:"#ff77bd",rim:"#ff2f92",gill:"rgba(255,79,163,.55)",glow:"rgba(255,79,163,.30)"},
@@ -611,17 +678,12 @@ const SHROOM_COLS=[
   {top:"#8fe2ff",rim:"#38d4ff",gill:"rgba(56,212,255,.55)",glow:"rgba(56,212,255,.28)"},
   {top:"#ff9be0",rim:"#e93fff",gill:"rgba(233,63,255,.5)",glow:"rgba(233,63,255,.28)"}];
 
-function buildTrack(course){
+function buildTrack(course,theme){
+  if(theme) themeCur=theme;
   const plan=PLANS[course]||PLANS.class;
-  TOTAL=plan.total; trackLen=TOTAL*SEG_LEN;
-  segments=[]; events=[]; totalFF=0;
-  // 완만한 S커브 베이스
-  for(let i=0;i<TOTAL;i++){
-    const c= Math.sin(i*0.012)*2.2 + Math.sin(i*0.031+2)*1.4;
-    segments.push({i, curve:c, sprites:[]});
-  }
-  // 이벤트 배치 (콘텐츠는 매 판 셔플, 위치는 플랜 순서대로 자동)
-  const fk=shuffle(FORKS), qz=shuffle(QUIZZES), em=shuffle(EMOTIONS);
+  const P=poolsFor();
+  // 이벤트 배치 (콘텐츠 셔플, 위치는 플랜 순서대로) → 총 길이 자동 산출
+  const fk=shuffle(P.F), qz=shuffle(P.Q), em=shuffle(P.E);
   const evDefs=[];
   let cursor=130, fi=0, qi=0, ei=0;
   for(const t of plan.seq){
@@ -629,10 +691,19 @@ function buildTrack(course){
     if(t==="fork") d.data=fk[fi++%fk.length];
     if(t==="quiz") d.data=qz[qi++%qz.length];
     if(t==="emotion") d.data=em[ei++%em.length];
-    if(t==="breath"){ d.len=90; cursor+=190; } else cursor+=110;
+    if(t==="breath"){ d.len=90; cursor+=190; }
+    else if(t==="storm"){ d.len=60; cursor+=170; }
+    else cursor+=110;
     evDefs.push(d);
   }
-  evDefs.push({type:"finish", seg:TOTAL-60});
+  evDefs.push({type:"finish", seg:cursor+30});
+  TOTAL=cursor+110; trackLen=TOTAL*SEG_LEN;
+  segments=[]; events=[]; totalFF=0;
+  // 완만한 S커브 베이스
+  for(let i=0;i<TOTAL;i++){
+    const c= Math.sin(i*0.012)*2.2 + Math.sin(i*0.031+2)*1.4;
+    segments.push({i, curve:c, sprites:[]});
+  }
   // 이벤트 주변 직선화
   for(const ev of evDefs){
     const from=ev.seg-45, to=ev.seg+(ev.len||0)+15;
@@ -656,8 +727,13 @@ function buildTrack(course){
     if(ev.type==="dodge"){
       markBusy(ev.seg-6,ev.seg+46);
       for(let k=0;k<5;k++){ const s=ev.seg+k*9;
-        addSprite(s,"obs",pick([-0.62,-0.22,0.22,0.62]),{label:pick(THOUGHTS)}); }
+        addSprite(s,"obs",pick([-0.62,-0.22,0.22,0.62]),{label:pick(P.T)}); }
       for(let k=0;k<6;k++) addSprite(ev.seg+4+k*7,"ff",Math.sin(k*1.2)*0.5,{});
+    }
+    if(ev.type==="storm"){
+      markBusy(ev.seg-26,ev.seg+ev.len+16);
+      for(let k=0;k<Math.floor(ev.len/4);k++)
+        addSprite(ev.seg+4+k*4,"obs",pick([-0.62,-0.3,0,0.3,0.62]),{label:pick(P.T),storm:true});
     }
     if(ev.type==="fork"){ markBusy(ev.seg-46,ev.seg+16);
       addSprite(ev.seg,"arch",-0.55,{w:0.85,col:"mint"}); addSprite(ev.seg,"arch",0.55,{w:0.85,col:"mint"});
@@ -696,7 +772,7 @@ let stats=null;
 let shake=0, hitFlash=0, calmGlow=0;
 let steerDir=0, autoLane=null;
 let gameT=0;
-let activeGate=null, activeZone=null, forcedBreath=null, emotionEv=null;
+let activeGate=null, activeZone=null, forcedBreath=null, emotionEv=null, stormActive=null;
 let classTotal=0, classBots=[];
 let heatLog=[], logT=0;
 let starField=[];
@@ -751,10 +827,10 @@ function pushRider(final){
 
 // ---------- 진행/이벤트 ----------
 function startRide(cls){
-  classMode=cls; buildTrack(pendingCourse);
+  classMode=cls; buildTrack(pendingCourse,pendingTheme);
   position=0; speed=0; playerX=0; heat=20; tsCur=1; tsTarget=1;
   stats=newStats(); shake=0; hitFlash=0; gameT=0; heatLog=[]; logT=0;
-  activeGate=null; activeZone=null; forcedBreath=null; emotionEv=null; autoLane=null;
+  activeGate=null; activeZone=null; forcedBreath=null; emotionEv=null; autoLane=null; stormActive=null;
   classTotal=0; classBots=Array.from({length:24},()=>({next:rand(1,8)}));
   boost=false; breathHeld=false;
   $("#hud").classList.remove("hidden");
@@ -785,6 +861,8 @@ function updateEvents(){
       else if(ev.type==="quiz"&&p>=ev.seg-42) activateQuiz(ev);
       else if(ev.type==="emotion"&&p>=ev.seg-26){ ev.state="active"; tsTarget=0.22; showMsg("💠 빛의 곤충이 다가온다…",1500); }
       else if(ev.type==="breath"&&p>=ev.seg-18){ ev.state="active"; showMsg("🌬️ 호흡 존 진입 — 리듬에 맞춰 숨쉬기",1900); }
+      else if(ev.type==="storm"&&p>=ev.seg-24){ ev.state="active";
+        showMsg("⛈️ 생각의 폭풍! <b>숨을 고르면(꾹)</b> 뚫고 지나갈 수 있다",2600); }
       else if(ev.type==="dodge"&&p>=ev.seg-24){ ev.state="active"; showMsg("⚠️ 생각 덩어리 주의!",1400); }
     }
     if(ev.state==="active"){
@@ -796,6 +874,12 @@ function updateEvents(){
           ev._m=stats.breathMatch; ev._t=stats.breathTotal;
           $("#breathMini").classList.remove("hidden");} }
         else if(p>=ev.seg+ev.len){ closeBreathZone(ev); }
+      }
+      else if(ev.type==="storm"){
+        if(p>=ev.seg&&p<ev.seg+ev.len){ stormActive=ev; }
+        else if(p>=ev.seg+ev.len){ ev.state="done";
+          if(stormActive===ev){ stormActive=null; stats.ff+=10; sfx.good();
+            showMsg("🌤️ 폭풍을 통과했다! 보너스 ✦10",2200); } }
       }
       else if(ev.type==="dodge"&&p>=ev.seg+50) ev.state="done";
       else if(ev.type==="finish"&&p>=ev.seg) finishRide();
@@ -1001,9 +1085,14 @@ function update(dt){
             if(ok&&Math.abs(sp.off-playerX)<0.32){ sp.dead=true; stats.ff+=(sp.val||1);
               (sp.bonus||sp.rainbow)?sfx.bonus():sfx.collect(); }
           } else if(sp.type==="obs"){
-            if(Math.abs(sp.off-playerX)<0.3){ sp.dead=true; stats.hits++;
-              heat=clamp(heat+14,0,100); shake=Math.max(shake,9); hitFlash=1; sfx.hit();
-              showMsg(`💢 “${sp.label}” — 훅 들어온 생각!`,1600); }
+            if(Math.abs(sp.off-playerX)<0.3){
+              if(sp.storm&&breathHeld){ // 폭풍 속: 호흡 중이면 생각이 흩어진다
+                sp.dead=true; stats.ff+=1; sfx.collect();
+              } else {
+                sp.dead=true; stats.hits++;
+                heat=clamp(heat+(sp.storm?9:14),0,100); shake=Math.max(shake,9); hitFlash=1; sfx.hit();
+                showMsg(sp.storm?`⛈️ “${sp.label}” — 숨을 고르면 통과!`:`💢 “${sp.label}” — 훅 들어온 생각!`,1600);
+              } }
             else stats.dodged++;
           }
         }
@@ -1041,10 +1130,11 @@ function update(dt){
 function fogMix(f){ return clamp(f,0,1); }
 function render(){
   ctx.clearRect(0,0,W,H);
+  const TH=THEMES[themeCur];
   let g;
-  if(IMGS.sky){
+  if(IMGS[TH.skyKey]){
     // 실사 하늘 (cover-fit, 수평선 하단 정렬)
-    const im=IMGS.sky, rH=HH+50, sc=Math.max(W/im.width,rH/im.height);
+    const im=IMGS[TH.skyKey], rH=HH+50, sc=Math.max(W/im.width,rH/im.height);
     const dw=im.width*sc, dh=im.height*sc;
     ctx.drawImage(im,(W-dw)/2,rH-dh,dw,dh);
     for(const s of starField){ const tw=0.4+0.6*Math.abs(Math.sin(gameT*0.7+s.p));
@@ -1092,16 +1182,16 @@ function render(){
     if(prev){
       const f=fogMix(n/DRAW);
       // 지면
-      const gc=mixCol([10,18,32],[16,26,48],f);
+      const gc=mixCol(TH.ground[0],TH.ground[1],f);
       ctx.fillStyle=`rgb(${gc[0]},${gc[1]},${gc[2]})`;
       ctx.fillRect(0,p.y,W,prev.y-p.y+1);
       // 도로
-      const rc=mixCol([16,24,42],[18,28,50],f);
+      const rc=mixCol(TH.road[0],TH.road[1],f);
       quad(prev.x-prev.w,prev.y,prev.x+prev.w,prev.y,p.x+p.w,p.y,p.x-p.w,p.y,`rgb(${rc[0]},${rc[1]},${rc[2]})`);
-      // 민트 엣지 글로우
+      // 엣지 글로우 (테마 색)
       const ea=(1-f)*0.55;
-      quad(prev.x-prev.w,prev.y,prev.x-prev.w*0.94,prev.y,p.x-p.w*0.94,p.y,p.x-p.w,p.y,`rgba(63,229,160,${ea})`);
-      quad(prev.x+prev.w*0.94,prev.y,prev.x+prev.w,prev.y,p.x+p.w,p.y,p.x+p.w*0.94,p.y,`rgba(63,229,160,${ea})`);
+      quad(prev.x-prev.w,prev.y,prev.x-prev.w*0.94,prev.y,p.x-p.w*0.94,p.y,p.x-p.w,p.y,`rgba(${TH.edge},${ea})`);
+      quad(prev.x+prev.w*0.94,prev.y,prev.x+prev.w,prev.y,p.x+p.w,p.y,p.x+p.w*0.94,p.y,`rgba(${TH.edge},${ea})`);
       // 중앙 점선
       if(((baseIdx+n)%4)<2)
         quad(prev.x-prev.w*0.015,prev.y,prev.x+prev.w*0.015,prev.y,p.x+p.w*0.015,p.y,p.x-p.w*0.015,p.y,`rgba(180,220,255,${(1-f)*0.16})`);
@@ -1113,10 +1203,10 @@ function render(){
   if(first&&first.y<H){
     const t=(H-HH)/(first.y-HH);
     const xb=HW+(first.x-HW)*t, wb=first.w*t;
-    ctx.fillStyle="rgb(10,18,32)"; ctx.fillRect(0,first.y,W,H-first.y);
-    quad(xb-wb,H,xb+wb,H,first.x+first.w,first.y,first.x-first.w,first.y,"rgb(16,24,42)");
-    quad(xb-wb,H,xb-wb*0.94,H,first.x-first.w*0.94,first.y,first.x-first.w,first.y,"rgba(63,229,160,.6)");
-    quad(xb+wb*0.94,H,xb+wb,H,first.x+first.w,first.y,first.x+first.w*0.94,first.y,"rgba(63,229,160,.6)");
+    ctx.fillStyle=`rgb(${TH.ground[0][0]},${TH.ground[0][1]},${TH.ground[0][2]})`; ctx.fillRect(0,first.y,W,H-first.y);
+    quad(xb-wb,H,xb+wb,H,first.x+first.w,first.y,first.x-first.w,first.y,`rgb(${TH.road[0][0]},${TH.road[0][1]},${TH.road[0][2]})`);
+    quad(xb-wb,H,xb-wb*0.94,H,first.x-first.w*0.94,first.y,first.x-first.w,first.y,`rgba(${TH.edge},.6)`);
+    quad(xb+wb*0.94,H,xb+wb,H,first.x+first.w,first.y,first.x+first.w*0.94,first.y,`rgba(${TH.edge},.6)`);
   }
   // 수평선 안개
   g=ctx.createLinearGradient(0,HH-30,0,HH+70);
@@ -1134,7 +1224,8 @@ function render(){
       if(sp.type==="shroom"){ if(n<3)continue; const hpx=p.scale*sp.size*HH;
           const fade=clamp((H*0.62-hpx)/(H*0.22),0,1);
           if(hpx>2&&fade>0.02){
-            if(shroomVars){ const v=shroomVars[Math.floor(sp.seed*7.7)%shroomVars.length];
+            const vs=TH.vars();
+            if(vs){ const v=vs[Math.floor(sp.seed*7.7)%vs.length];
               const iw=hpx*(v.width/v.height);
               ctx.globalAlpha=a*fade; ctx.drawImage(v,sx-iw/2,p.y-hpx,iw,hpx); ctx.globalAlpha=1; }
             else drawShroom(sx,p.y,hpx,sp.col,sp.seed,a*fade);
@@ -1177,6 +1268,18 @@ function render(){
     g=ctx.createRadialGradient(HW,HH,H*0.25,HW,HH,H*0.8);
     g.addColorStop(0,"rgba(255,59,92,0)"); g.addColorStop(1,`rgba(255,59,92,${hitFlash*0.4})`);
     ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  }
+  // 생각의 폭풍: 어둠 + 빗줄기
+  if(stormActive&&state==="ride"){
+    ctx.fillStyle="rgba(4,7,16,.30)"; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle=`rgba(170,205,255,${breathHeld?0.12:0.28})`; ctx.lineWidth=1.2;
+    for(let i=0;i<36;i++){ const x=Math.random()*W, y=Math.random()*H*0.85, len=rand(14,32);
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-len*0.35,y+len); ctx.stroke(); }
+    if(breathHeld){ // 호흡 중엔 주위가 고요해진다
+      g=ctx.createRadialGradient(HW,HH,H*0.12,HW,HH,H*0.55);
+      g.addColorStop(0,"rgba(63,229,160,.12)"); g.addColorStop(1,"rgba(63,229,160,0)");
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
   }
 
   drawHandlebar();
@@ -1381,6 +1484,8 @@ let lastGrade=null;
 function buildResults(){
   const sync=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):null;
   lastGrade=calcGrade();
+  myNote=""; $("#inpNote").value=""; $("#noteDone").textContent="";
+  $("#btnPropose").classList.toggle("hidden",!(classMode&&roomCode));
   $("#medalIcon").textContent=lastGrade.m;
   $("#medalName").textContent=lastGrade.t+" — 반딧불이 "+Math.round((totalFF?stats.ff/totalFF:0)*100)+"% 수집";
   const fkGood=stats.forks.filter(f=>f.good).length;
@@ -1531,8 +1636,13 @@ function saveCard(){
     g.fillStyle="#eaf4ff";
     y=wrapText(g,"“"+s+"”",165,y,780,44)+22;
   }
+  // 내가 남긴 문장
+  if(myNote){
+    g.textAlign="center"; g.fillStyle="#ffe9a8"; g.font=`800 36px ${F}`;
+    y=wrapText(g,"💬 “"+myNote+"”",540,Math.max(y+40,915),840,50)+6;
+  }
   // 오늘의 한 줄
-  y=Math.max(y+30,980);
+  y=Math.min(Math.max(y+30,1000),1045);
   g.textAlign="center";
   g.fillStyle="rgba(63,229,160,.12)";
   g.fillRect(100,y-46,880,150);
@@ -1554,6 +1664,21 @@ function saveCard(){
   },"image/png");
 }
 $("#btnCard").addEventListener("click",saveCard);
+
+// ---------- 한 줄 성찰 ----------
+let myNote="";
+$("#btnNote").addEventListener("click",()=>{
+  const v=($("#inpNote").value||"").trim();
+  if(!v){ $("#noteDone").textContent="문장을 입력해주세요!"; return; }
+  myNote=v; localStorage.setItem("mr_lastnote",v);
+  if(db&&roomCode) db.collection("rooms").doc(roomCode).collection("riders").doc(riderId)
+    .set({note:v},{merge:true}).catch(()=>{});
+  $("#noteDone").textContent="남겼어요 ✔ 오늘의 카드에도 담깁니다"+(roomCode?" · 선생님 화면에 표시돼요":"");
+  sfx.good();
+});
+$("#btnPropose").addEventListener("click",()=>{
+  window.open("submit.html?room="+(roomCode||""),"_blank");
+});
 
 // ---------- 입력 ----------
 window.addEventListener("keydown",e=>{
@@ -1609,10 +1734,14 @@ $("#chkLow").addEventListener("change",e=>{ const on=e.target.checked;
   localStorage.setItem("mr_low",on?"1":"0"); DRAW=on?46:70; });
 
 // ---------- 화면 전환 ----------
-let pendingClass=false, pendingCourse="class";
-document.querySelectorAll(".cbtn").forEach(b=>b.addEventListener("click",()=>{
-  document.querySelectorAll(".cbtn").forEach(x=>x.classList.remove("active"));
+let pendingClass=false, pendingCourse="class", pendingTheme="night";
+document.querySelectorAll(".cbtn[data-course]").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".cbtn[data-course]").forEach(x=>x.classList.remove("active"));
   b.classList.add("active"); pendingCourse=b.dataset.course;
+}));
+document.querySelectorAll(".cbtn[data-theme]").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".cbtn[data-theme]").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); pendingTheme=b.dataset.theme;
 }));
 $("#btnSolo").addEventListener("click",()=>{initAudio();pendingClass=false;
   $("#classNote").classList.add("hidden"); $("#roomJoin").classList.add("hidden");

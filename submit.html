@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>우리 반 갈림길 만들기 — 마음의 밤길 라이더</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{--mint:#3FE5A0;--pink:#ff4fa3;--cyan:#38d4ff;--ink:#eaf4ff;--dim:#8fa3c0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:radial-gradient(ellipse at 50% -20%,#101a33,#05070e 60%);min-height:100vh;
+    font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:var(--ink);
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{width:min(94vw,520px);background:rgba(12,18,34,.92);border:1px solid rgba(63,229,160,.4);
+    border-radius:18px;padding:26px;box-shadow:0 0 40px rgba(63,229,160,.1)}
+  h1{font-size:21px;font-weight:900;text-align:center;margin-bottom:6px}
+  h1 em{font-style:normal;color:var(--mint)}
+  .sub{text-align:center;color:var(--dim);font-size:13.5px;margin-bottom:22px;line-height:1.6}
+  label{display:block;font-size:14px;font-weight:800;margin:16px 0 7px}
+  label b{color:var(--mint)} label i{color:var(--pink);font-style:normal}
+  input,textarea{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.2);
+    border-radius:10px;padding:12px;color:var(--ink);font-family:inherit;font-size:15px;outline:none;resize:none}
+  input:focus,textarea:focus{border-color:var(--mint)}
+  #room{text-transform:uppercase;letter-spacing:.2em;font-weight:800}
+  .hint{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.5}
+  button{width:100%;margin-top:22px;border:none;border-radius:12px;padding:15px;
+    font-family:inherit;font-size:16px;font-weight:900;cursor:pointer;
+    background:linear-gradient(135deg,var(--mint),#2bc4ff);color:#06121c}
+  #done{display:none;text-align:center;padding:30px 0}
+  #done .big{font-size:44px;margin-bottom:12px}
+  #done p{color:var(--dim);line-height:1.7;font-size:14.5px}
+  #err{color:#ff8aa5;font-size:13px;text-align:center;margin-top:12px;min-height:1.2em}
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="form">
+    <h1>✏️ 우리 반 <em>갈림길</em> 만들기</h1>
+    <div class="sub">네가 겪은 상황으로 게임 문항을 제안해봐!<br>선생님 검수 후 진짜 게임에 들어갈 수 있어 🌙</div>
+    <label>교실 코드</label>
+    <input id="room" maxlength="4" placeholder="예: A3FK" autocomplete="off">
+    <label>① 상황 <b>(언제 마음이 흔들렸나?)</b></label>
+    <textarea id="sit" rows="2" maxlength="60" placeholder="예: 짝이 내 필통을 말없이 가져가서 쓰고 있었다"></textarea>
+    <label>② <b>건강한 생각</b> (넓은 길)</label>
+    <textarea id="good" rows="2" maxlength="60" placeholder="예: 급했나 보네. 다음엔 말하고 쓰라고 해야지"></textarea>
+    <label>③ <i>빠지기 쉬운 생각</i> (좁은 길)</label>
+    <textarea id="bad" rows="2" maxlength="60" placeholder="예: 날 무시하니까 막 가져가는 거야"></textarea>
+    <label>이름/닉네임 (선택)</label>
+    <input id="by" maxlength="10" placeholder="빈칸이면 익명">
+    <button id="btnSend">제안 보내기 🚀</button>
+    <div id="err"></div>
+  </div>
+  <div id="done">
+    <div class="big">🌟</div>
+    <h1>제안 완료!</h1>
+    <p>선생님 화면으로 전달됐어.<br>검수를 통과하면 우리 반의 밤길에 등장할 거야.<br><br>
+    <a href="#" onclick="location.reload();return false" style="color:var(--mint)">하나 더 제안하기</a></p>
+  </div>
+</div>
+<script>
+"use strict";
+firebase.initializeApp({
+  apiKey: "AIzaSyAPjRhpGsBiILOk4xIO6qdwU5deE556nis",
+  authDomain: "mind-jump.firebaseapp.com",
+  projectId: "mind-jump",
+  storageBucket: "mind-jump.firebasestorage.app",
+  messagingSenderId: "640879942374",
+  appId: "1:640879942374:web:072026fb598ddc39777927"
+});
+const db = firebase.firestore();
+const $ = s => document.querySelector(s);
+const qRoom = new URLSearchParams(location.search).get("room");
+if (qRoom) $("#room").value = qRoom.toUpperCase();
+
+$("#btnSend").onclick = async () => {
+  const room = ($("#room").value || "").trim().toUpperCase();
+  const sit = ($("#sit").value || "").trim();
+  const good = ($("#good").value || "").trim();
+  const bad = ($("#bad").value || "").trim();
+  const by = ($("#by").value || "").trim() || "익명";
+  if (room.length !== 4) { $("#err").textContent = "교실 코드 4글자를 입력해주세요!"; return; }
+  if (!sit || !good || !bad) { $("#err").textContent = "①②③을 모두 채워주세요!"; return; }
+  $("#btnSend").disabled = true; $("#err").textContent = "";
+  try {
+    await db.collection("rooms").doc(room).collection("proposals").add({
+      sit, good, bad, by, ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    $("#form").style.display = "none"; $("#done").style.display = "block";
+  } catch (e) {
+    $("#err").textContent = "전송 실패 — 코드를 확인하거나 잠시 후 다시 시도해주세요";
+    $("#btnSend").disabled = false;
+  }
+};
+</script>
+</body>
+</html>
