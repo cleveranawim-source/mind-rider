@@ -473,6 +473,7 @@
     </div>
     <div class="btnRow" style="width:100%;align-items:center">
       <button class="btn primary hidden" id="btnNext" style="width:min(86vw,340px)">다음 길로 →</button>
+      <button class="btn secondary hidden" id="btnCert" style="width:min(86vw,340px);border-color:rgba(255,215,94,.6);color:#ffe9a8">🎖️ 여정 수료증 저장</button>
       <button class="btn ghost hidden" id="btnPropose" style="width:min(86vw,340px)">✏️ 우리 반 갈림길 문항 제안하기</button>
       <button class="btn secondary" id="btnCard" style="width:min(86vw,340px)">📸 오늘의 카드 저장</button>
       <button class="btn primary" id="btnAgain" style="width:min(86vw,340px)">다시 달리기</button>
@@ -1631,6 +1632,7 @@ function buildResults(){
   const inJourney=!!(journey&&roomCode);
   $("#journeyBox").classList.toggle("hidden",!inJourney);
   $("#btnNext").classList.add("hidden");
+  $("#btnCert").classList.add("hidden");
   $("#btnAgain").textContent=inJourney?"이 길 다시 달리기 (기록 갱신)":"다시 달리기";
   if(inJourney){
     const META={night:["🌃","밤의 숲"],sea:["🌊","새벽 바다"],alley:["🏮","등불 골목"],city:["🌆","도시의 밤"]};
@@ -1643,7 +1645,8 @@ function buildResults(){
       return `<div class="jSlot ${cls}"><span class="jic">${META[k][0]}</span>${META[k][1]}<span class="jmed">${med}</span></div>`;
     }).join("");
     if(doneN>=4){
-      $("#jHint").innerHTML=`🎉 <b style="color:var(--mint)">네 개의 길 완주!</b> 누적 반딧불이 ✦${journeyTotalFF()} — 기록을 갱신하고 싶은 길을 골라 다시 달릴 수 있어요 (혼자 달리기).`;
+      $("#jHint").innerHTML=`🎉 <b style="color:var(--mint)">네 개의 길 완주!</b> 누적 반딧불이 ✦${journeyTotalFF()} — 아래 수료증을 저장하세요. 기록 갱신은 재입장 시 길을 골라 달릴 수 있어요.`;
+      $("#btnCert").classList.remove("hidden");
     }else{
       $("#jHint").textContent=`${doneN}/4 완료 · 진행 상황은 자동 저장 — 다음 시간에 같은 코드로 이어집니다`;
       $("#btnNext").textContent=`다음 길로 → ${META[nextK][0]} ${META[nextK][1]}`;
@@ -1830,6 +1833,89 @@ function saveCard(){
   },"image/png");
 }
 $("#btnCard").addEventListener("click",saveCard);
+
+// ---------- 여정 수료증 (4/4 완주) ----------
+function roundRectC(g,x,y,w,h,r){ g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+function saveCertificate(){
+  if(!journey) return;
+  const c=document.createElement("canvas"); c.width=1080; c.height=1350;
+  const g=c.getContext("2d");
+  const F='Pretendard,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+  // 배경 + 별
+  const bg=g.createLinearGradient(0,0,0,1350);
+  bg.addColorStop(0,"#070b16"); bg.addColorStop(0.55,"#0b1226"); bg.addColorStop(1,"#101a33");
+  g.fillStyle=bg; g.fillRect(0,0,1080,1350);
+  for(let i=0;i<120;i++){ g.globalAlpha=rand(0.15,0.8); g.fillStyle="#cfe4ff";
+    g.beginPath(); g.arc(rand(30,1050),rand(30,1320),rand(0.7,2.2),0,7); g.fill(); }
+  g.globalAlpha=1;
+  // 골드 이중 프레임 + 코너 장식
+  g.strokeStyle="rgba(255,215,94,.85)"; g.lineWidth=4; g.strokeRect(36,36,1008,1278);
+  g.strokeStyle="rgba(255,215,94,.35)"; g.lineWidth=1.5; g.strokeRect(52,52,976,1246);
+  g.strokeStyle="#ffd75e"; g.lineWidth=6;
+  [[36,36,96,36,36,96],[1044,36,984,36,1044,96],[36,1314,96,1314,36,1254],[1044,1314,984,1314,1044,1254]]
+    .forEach(p=>{ g.beginPath(); g.moveTo(p[2],p[3]); g.lineTo(p[0],p[1]); g.lineTo(p[4],p[5]); g.stroke(); });
+  g.textAlign="center";
+  // 헤더
+  g.fillStyle="#ffd75e"; g.font=`800 25px ${F}`;
+  g.fillText("— CERTIFICATE OF JOURNEY —",540,122);
+  g.fillStyle="#ffffff"; g.font=`900 64px ${F}`;
+  g.fillText("여정 수료증",540,198);
+  g.fillStyle="rgba(186,255,226,.92)"; g.font=`700 25px ${F}`;
+  g.fillText("🏍 마음의 밤길 라이더 — 네 개의 길, 네 개의 마음",540,242);
+  // 이름 + 날짜
+  g.fillStyle="#eaf4ff"; g.font=`900 50px ${F}`;
+  g.fillText((riderName||"라이더")+" 님",540,332);
+  const today=new Date();
+  g.fillStyle="rgba(143,163,192,.95)"; g.font=`600 23px ${F}`;
+  g.fillText(`${today.getFullYear()}년 ${today.getMonth()+1}월 ${today.getDate()}일 · 네 개의 길을 모두 완주했습니다`,540,374);
+  // 4맵 카드 (2×2)
+  const META={night:["🌃","밤의 숲","감정 조절","#3FE5A0"],
+    sea:["🌊","새벽 바다","불안 다루기","#38d4ff"],
+    alley:["🏮","노을 등불 골목","타인 이해","#ff9670"],
+    city:["🌆","도시의 밤 별빛 길","공동체","#ffd75e"]};
+  const M={gold:"🥇",silver:"🥈",bronze:"🥉"};
+  JOURNEY_ORDER.forEach((k,i)=>{
+    const m=journey.perMap[k]||{};
+    const x=90+(i%2)*460, y=418+Math.floor(i/2)*200, w=440, h=176;
+    g.fillStyle="rgba(255,255,255,.05)";
+    g.strokeStyle=META[k][3]; g.lineWidth=2;
+    roundRectC(g,x,y,w,h,16); g.fill(); g.stroke();
+    g.textAlign="left";
+    g.font="46px serif"; g.fillText(META[k][0],x+26,y+66);
+    g.fillStyle="#eaf4ff"; g.font=`800 29px ${F}`; g.fillText(META[k][1],x+96,y+54);
+    g.fillStyle="rgba(143,163,192,.95)"; g.font=`600 20px ${F}`; g.fillText(META[k][2],x+96,y+86);
+    g.fillStyle=META[k][3]; g.font=`800 30px ${F}`;
+    g.fillText(`${M[m.grade]||"✅"} ✦${m.ff||0}`,x+26,y+146);
+    g.fillStyle="rgba(234,244,255,.8)"; g.font=`600 21px ${F}`;
+    g.fillText(`호흡 ${m.sync||0}%`,x+266,y+146);
+  });
+  g.textAlign="center";
+  // 합계 + 여정 문구
+  g.fillStyle="#ffd75e"; g.font=`900 44px ${F}`;
+  g.fillText(`누적 반딧불이 ✦ ${journeyTotalFF()}`,540,894);
+  g.fillStyle="rgba(186,255,226,.95)"; g.font=`600 25px ${F}`;
+  g.fillText("밤의 숲을 지나, 새벽 바다를 건너, 등불 골목을 걸어,",540,952);
+  g.fillText("도시의 밤에 닿았습니다 — 속도를 다룰 줄 아는 사람이 되어.",540,989);
+  // 한 줄 성찰
+  const note=myNote||localStorage.getItem("mr_lastnote")||"";
+  if(note){ g.fillStyle="#ffe9a8"; g.font=`800 29px ${F}`;
+    wrapText(g,"💬 “"+note+"”",540,1064,860,42); }
+  // 푸터
+  g.strokeStyle="rgba(255,215,94,.4)"; g.lineWidth=1.5;
+  g.beginPath(); g.moveTo(240,1212); g.lineTo(840,1212); g.stroke();
+  g.fillStyle="rgba(234,244,255,.85)"; g.font=`700 23px ${F}`;
+  g.fillText("LevLab Yeol · 마음건강 SEL",540,1254);
+  // 저장
+  c.toBlob(b=>{
+    const u=URL.createObjectURL(b), a=document.createElement("a");
+    a.href=u; a.download=`mindride_수료증_${riderName||"rider"}_${today.toISOString().slice(0,10)}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),3000);
+  },"image/png");
+}
+$("#btnCert").addEventListener("click",saveCertificate);
 
 // ---------- 한 줄 성찰 ----------
 let myNote="";
