@@ -276,6 +276,16 @@
     font-weight:700;outline:none;min-width:0}
   .noteRow input:focus{border-color:var(--mint)}
   .noteRow .btn{padding:12px 16px;font-size:14px}
+  /* 여정 슬롯 */
+  #jSlots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .jSlot{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.14);border-radius:12px;
+    padding:10px 4px;text-align:center;font-size:12px;line-height:1.5}
+  .jSlot .jic{font-size:22px;display:block}
+  .jSlot .jmed{font-size:16px;display:block;min-height:1.3em}
+  .jSlot.jdone{border-color:rgba(63,229,160,.55);background:rgba(21,64,48,.35)}
+  .jSlot.jcur{border-color:var(--cyan);box-shadow:0 0 14px rgba(56,212,255,.35)}
+  .jSlot.jtodo{opacity:.45}
+  .jlock{opacity:.45;pointer-events:none}
   .sparkNote{font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.5}
 
   /* ---------- 인트로 시네마틱 ---------- */
@@ -399,8 +409,9 @@
 <div id="howtoScreen" class="screen hidden">
   <div class="howBox">
     <h2>달리기 전에, <em>딱 5가지</em></h2>
-    <div class="modeNote hidden" id="classNote">🌙 우리 반 모드: 선생님이 알려준 <b>교실 코드</b>를 입력하면
-      반 전체의 반딧불이가 실시간으로 합쳐져 숲을 밝힙니다. 코드가 없으면 데모(가상 친구 24명)로 체험!</div>
+    <div class="modeNote hidden" id="classNote">🌙 우리 반 모드는 <b>4개의 길을 순서대로 달리는 여정</b>입니다.
+      선생님이 알려준 <b>교실 코드</b>로 입장하면 현재 순서의 길이 자동 선택되고,
+      맵별 기록과 반딧불이가 <b>계속 누적</b>돼요. 코드가 없으면 데모(가상 친구 24명)로 체험!</div>
     <div id="roomJoin" class="hidden">
       <div class="rjRow">
         <input id="inpRoom" maxlength="4" placeholder="교실 코드 (예: A3FK)" autocapitalize="characters" autocomplete="off">
@@ -414,6 +425,8 @@
       <button class="cbtn" data-theme="alley">🏮 노을 등불 골목<small>타인 이해</small></button>
       <button class="cbtn" data-theme="city">🌆 도시의 밤 별빛 길<small>공동체</small></button>
     </div>
+    <div id="jNote" class="rjHint hidden" style="margin:-8px 0 14px">🗺 여정 모드에서는 길이 자동
+      선택됩니다 (완주한 길 다음 순서). 길 선택은 혼자 달리기에서 자유롭게!</div>
     <div class="courseSel">
       <button class="cbtn active" data-course="class">🏫 수업 코스<small>약 3분</small></button>
       <button class="cbtn" data-course="free">🌌 탐험 코스<small>약 5분</small></button>
@@ -432,6 +445,11 @@
   <div class="resBox">
     <h2>🏁 밤길 완주! <em id="resTitle"></em></h2>
     <div id="medal"><span id="medalIcon">🥉</span><span id="medalName"></span></div>
+    <div class="recap hidden" id="journeyBox">
+      <h4>🗺️ 우리 반 여정 — 네 개의 길</h4>
+      <div id="jSlots"></div>
+      <div class="rjHint" id="jHint"></div>
+    </div>
     <div class="statGrid" id="statGrid"></div>
     <div class="forest" id="forestBox">
       <h4 id="forestTitle">✦ 우리가 밝힌 숲</h4>
@@ -454,6 +472,7 @@
       <div class="rjHint" id="noteDone"></div>
     </div>
     <div class="btnRow" style="width:100%;align-items:center">
+      <button class="btn primary hidden" id="btnNext" style="width:min(86vw,340px)">다음 길로 →</button>
       <button class="btn ghost hidden" id="btnPropose" style="width:min(86vw,340px)">✏️ 우리 반 갈림길 문항 제안하기</button>
       <button class="btn secondary" id="btnCard" style="width:min(86vw,340px)">📸 오늘의 카드 저장</button>
       <button class="btn primary" id="btnAgain" style="width:min(86vw,340px)">다시 달리기</button>
@@ -852,16 +871,71 @@ function subscribeRoom(){
     roomOthersFF=sum; roomCount=n;
   },()=>{});
 }
+
+// ---------- 우리 반 여정 (4맵 원정): 맵별 최고 기록 + 누적 합산 ----------
+const JOURNEY_ORDER=["night","sea","alley","city"];
+let journey=null; // {code, perMap:{theme:{ff,sync,grade,hits}}, wrongAll:{}}
+function loadJourney(code){
+  let j=null;
+  try{ j=JSON.parse(localStorage.getItem("mr_j_"+code)||"null"); }catch(e){}
+  if(!j||typeof j.perMap!=="object") j={perMap:{},wrongAll:{}};
+  if(typeof j.wrongAll!=="object") j.wrongAll={};
+  j.code=code; return j;
+}
+function saveJourney(){
+  if(journey&&journey.code)
+    try{ localStorage.setItem("mr_j_"+journey.code,
+      JSON.stringify({perMap:journey.perMap,wrongAll:journey.wrongAll})); }catch(e){}
+}
+function journeyMapsDone(){ return journey?JOURNEY_ORDER.filter(k=>journey.perMap[k]).length:0; }
+function journeyNextMap(){
+  if(!journey) return "night";
+  return JOURNEY_ORDER.find(k=>!journey.perMap[k]) || JOURNEY_ORDER[JOURNEY_ORDER.length-1];
+}
+function journeyTotalFF(exceptKey){
+  if(!journey) return 0;
+  let s=0;
+  for(const k of JOURNEY_ORDER){
+    if(k===exceptKey) continue;
+    const m=journey.perMap[k]; if(m) s+=(m.ff||0);
+  }
+  return s;
+}
+function journeyLiveFF(){ // 진행 중인 판을 포함한 내 누적 (판이 최고기록보다 낮아도 합계가 줄지 않게)
+  if(!journey) return stats?stats.ff:0;
+  const bestCur=journey.perMap[themeCur]?(journey.perMap[themeCur].ff||0):0;
+  return journeyTotalFF(themeCur)+Math.max(bestCur, stats?stats.ff:0);
+}
+function mergeWrong(a,b){
+  const o={...(a||{})};
+  for(const k in (b||{})) o[k]=(o[k]||0)+b[k];
+  return o;
+}
+
 function pushRider(final){
   if(!db||!roomCode||!stats)return;
   const sync=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):0;
-  db.collection("rooms").doc(roomCode).collection("riders").doc(riderId).set({
-    name:riderName||"라이더", ff:stats.ff, hits:stats.hits,
-    prog:Math.min(100,Math.round(position/trackLen*100)), done:!!final,
-    grade:final?(lastGrade?lastGrade.key:null):null, sync,
-    wrong:stats.wrong||{}, game:"mind-ride",
-    ts:firebase.firestore.FieldValue.serverTimestamp()
-  },{merge:true}).catch(()=>{});
+  const doc={
+    name:riderName||"라이더", game:"mind-ride",
+    curMap:themeCur,
+    prog:Math.min(100,Math.round(position/trackLen*100)),
+    sync, ts:firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if(journey){
+    doc.ff=journeyLiveFF();                       // 여정 전체 누적
+    doc.journey=journey.perMap;                   // 맵별 최고 기록
+    doc.mapsDone=journeyMapsDone();
+    doc.done=journeyMapsDone()>=JOURNEY_ORDER.length;
+    // final 시점엔 finishRide가 이미 이번 판을 wrongAll에 합산한 상태 (이중 합산 방지)
+    doc.wrong=final?{...journey.wrongAll}:mergeWrong(journey.wrongAll, stats.wrong);
+    doc.hits=stats.hits;
+  }else{
+    doc.ff=stats.ff; doc.hits=stats.hits; doc.done=!!final;
+    doc.grade=final?(lastGrade?lastGrade.key:null):null;
+    doc.wrong=stats.wrong||{};
+  }
+  db.collection("rooms").doc(roomCode).collection("riders").doc(riderId)
+    .set(doc,{merge:true}).catch(()=>{});
 }
 
 // ---------- 진행/이벤트 ----------
@@ -882,7 +956,10 @@ function startRide(cls){
   const cd=$("#countdown"); cd.classList.remove("hidden"); cd.textContent=n;
   const iv=setInterval(()=>{ n--; if(n>0){cd.textContent=n; tone(660,.1,"sine",.1);}
     else{ clearInterval(iv); cd.classList.add("hidden"); state="ride"; startPad(); tone(990,.25,"sine",.12);
-      showMsg("밤길 출발! 반딧불이를 모아요 ✦",1800);} },800);
+      if(journey&&roomCode){
+        const idx=JOURNEY_ORDER.indexOf(themeCur)+1;
+        showMsg(`🗺️ 여정 ${idx}/4 — ${THEMES[themeCur].name} 출발!`,2200);
+      } else showMsg("밤길 출발! 반딧불이를 모아요 ✦",1800);} },800);
 }
 function hideAllScreens(){ ["#titleScreen","#howtoScreen","#resultsScreen"].forEach(s=>$(s).classList.add("hidden")); }
 
@@ -1047,6 +1124,15 @@ function finishRide(){
   $("#touchL").classList.add("hidden"); $("#touchR").classList.add("hidden");
   $("#breathMini").classList.add("hidden"); $("#qBanner").classList.add("hidden");
   $("#laneCards").classList.add("hidden");
+  // 여정 갱신: 맵별 최고 기록만 반영 (재도전은 기록 향상만 가능)
+  if(journey&&roomCode){
+    const syncPct=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):0;
+    const run={ff:stats.ff, sync:syncPct, grade:calcGrade().key, hits:stats.hits};
+    const prev=journey.perMap[themeCur];
+    if(!prev||(run.ff>(prev.ff||0))) journey.perMap[themeCur]=run;
+    journey.wrongAll=mergeWrong(journey.wrongAll, stats.wrong);
+    saveJourney();
+  }
   buildResults();
   pushRider(true);
   $("#resultsScreen").classList.remove("hidden");
@@ -1160,7 +1246,7 @@ function update(dt){
   // HUD
   if(riding){
     $("#ffCount").textContent=stats.ff;
-    if(classMode)$("#classCount").textContent=classTotal+stats.ff;
+    if(classMode)$("#classCount").textContent=classTotal+(journey&&roomCode?journeyLiveFF():stats.ff);
     $("#heatFill").style.width=heat.toFixed(0)+"%";
     $("#heatNum").textContent=heat.toFixed(0);
   }
@@ -1527,6 +1613,29 @@ function buildResults(){
   lastGrade=calcGrade();
   myNote=""; $("#inpNote").value=""; $("#noteDone").textContent="";
   $("#btnPropose").classList.toggle("hidden",!(classMode&&roomCode));
+  // 여정 패널 + 다음 길 버튼
+  const inJourney=!!(journey&&roomCode);
+  $("#journeyBox").classList.toggle("hidden",!inJourney);
+  $("#btnNext").classList.add("hidden");
+  $("#btnAgain").textContent=inJourney?"이 길 다시 달리기 (기록 갱신)":"다시 달리기";
+  if(inJourney){
+    const META={night:["🌃","밤의 숲"],sea:["🌊","새벽 바다"],alley:["🏮","등불 골목"],city:["🌆","도시의 밤"]};
+    const M={gold:"🥇",silver:"🥈",bronze:"🥉"};
+    const nextK=journeyNextMap(), doneN=journeyMapsDone();
+    $("#jSlots").innerHTML=JOURNEY_ORDER.map(k=>{
+      const m=journey.perMap[k];
+      const cls=m?"jdone":(k===nextK&&doneN<4?"jcur":"jtodo");
+      const med=m?`${M[m.grade]||"✅"} ✦${m.ff}`:(k===nextK&&doneN<4?"다음 길":"·");
+      return `<div class="jSlot ${cls}"><span class="jic">${META[k][0]}</span>${META[k][1]}<span class="jmed">${med}</span></div>`;
+    }).join("");
+    if(doneN>=4){
+      $("#jHint").innerHTML=`🎉 <b style="color:var(--mint)">네 개의 길 완주!</b> 누적 반딧불이 ✦${journeyTotalFF()} — 기록을 갱신하고 싶은 길을 골라 다시 달릴 수 있어요 (혼자 달리기).`;
+    }else{
+      $("#jHint").textContent=`${doneN}/4 완료 · 진행 상황은 자동 저장 — 다음 시간에 같은 코드로 이어집니다`;
+      $("#btnNext").textContent=`다음 길로 → ${META[nextK][0]} ${META[nextK][1]}`;
+      $("#btnNext").classList.remove("hidden");
+    }
+  }
   $("#medalIcon").textContent=lastGrade.m;
   $("#medalName").textContent=lastGrade.t+" — 반딧불이 "+Math.round((totalFF?stats.ff/totalFF:0)*100)+"% 수집";
   const fkGood=stats.forks.filter(f=>f.good).length;
@@ -1542,7 +1651,8 @@ function buildResults(){
     <div class="stat pink"><div class="v">${stats.hits}</div><div class="k">부딪힌 생각</div></div>
     <div class="stat pink"><div class="v">${stats.forced}</div><div class="k">과열 정지</div></div>`;
   // 숲 밝히기
-  const total=classMode?classTotal+stats.ff:stats.ff;
+  const myFF=(journey&&roomCode)?journeyLiveFF():stats.ff;
+  const total=classMode?classTotal+myFF:stats.ff;
   const pctV=classMode?clamp(Math.round(total/9),4,100):clamp(Math.round(stats.ff*1.6),4,100);
   $("#forestTitle").textContent=classMode?"✦ 우리 반이 함께 밝힌 숲":"✦ 내가 밝힌 숲";
   const row=$("#shroomRow"); row.innerHTML="";
@@ -1786,21 +1896,50 @@ document.querySelectorAll(".cbtn[data-theme]").forEach(b=>b.addEventListener("cl
 }));
 $("#btnSolo").addEventListener("click",()=>{initAudio();pendingClass=false;
   $("#classNote").classList.add("hidden"); $("#roomJoin").classList.add("hidden");
+  $("#jNote").classList.add("hidden");
+  document.querySelector(".themeSel").classList.remove("jlock");
   $("#titleScreen").classList.add("hidden");
   $("#howtoScreen").classList.remove("hidden");});
 $("#btnClass").addEventListener("click",()=>{initAudio();pendingClass=true;
   $("#classNote").classList.remove("hidden"); $("#roomJoin").classList.remove("hidden");
+  $("#jNote").classList.remove("hidden");
+  document.querySelector(".themeSel").classList.add("jlock");  // 여정 모드: 길 자동 선택
   $("#titleScreen").classList.add("hidden");
   $("#howtoScreen").classList.remove("hidden");});
 $("#btnGo").addEventListener("click",()=>{initAudio();
   if(pendingClass){
     roomCode=($("#inpRoom").value||"").trim().toUpperCase()||null;
     riderName=($("#inpName").value||"").trim();
-    if(roomCode) initFB().then(d=>{
-      if(d){ subscribeRoom(); }
-      else { roomCode=null; showMsg("연결 실패 — 데모 모드로 달립니다",2200); }
-    });
-  } else roomCode=null;
+    if(roomCode){
+      // 여정 모드: 로컬 여정 로드 → Firestore에서 더 앞선 기록이 있으면 복원(기기 변경 대응)
+      journey=loadJourney(roomCode);
+      let launched=false;
+      const go=()=>{ if(launched)return; launched=true;
+        pendingTheme=journeyNextMap(); startWithIntro(); };
+      initFB().then(async d=>{
+        if(d){
+          subscribeRoom();
+          try{
+            const snap=await db.collection("rooms").doc(roomCode)
+              .collection("riders").doc(riderId).get();
+            const r=snap.exists?snap.data():null;
+            if(r&&r.journey&&Object.keys(r.journey).length>journeyMapsDone()){
+              journey.perMap=r.journey;
+              journey.wrongAll=r.wrong||journey.wrongAll;
+              saveJourney();
+            }
+          }catch(e){}
+        } else {
+          roomCode=null; journey=null;
+          showMsg("연결 실패 — 데모 모드로 달립니다",2200);
+        }
+        go();
+      }).catch(go);
+      setTimeout(go,2500); // 네트워크 지연 시에도 출발
+      return;
+    }
+    journey=null;
+  } else { roomCode=null; journey=null; }
   startWithIntro();});
 // URL ?room=CODE 로 들어오면 교실 코드 자동 입력
 const qRoom=new URLSearchParams(location.search).get("room");
@@ -1819,7 +1958,12 @@ function startWithIntro(){
   v.play().catch(()=>{ v.muted=true; v.play().catch(done); });
   setTimeout(()=>{ if(!fin&&v.readyState<2) done(); },2500); // 인트로 파일이 없으면 바로 출발
 }
-$("#btnAgain").addEventListener("click",()=>{startRide(classMode);});
+$("#btnAgain").addEventListener("click",()=>{
+  if(journey&&roomCode) pendingTheme=themeCur;   // 같은 길 재도전 (최고 기록만 갱신)
+  startRide(classMode);});
+$("#btnNext").addEventListener("click",()=>{
+  pendingTheme=journeyNextMap();
+  startRide(classMode);});
 $("#btnHome").addEventListener("click",()=>{
   $("#resultsScreen").classList.add("hidden"); $("#titleScreen").classList.remove("hidden");
   state="attract"; buildTrack(); position=0; });
