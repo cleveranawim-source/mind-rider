@@ -234,7 +234,9 @@ function listenProposals(code){
         const btn = document.createElement("button");
         btn.className = "ghost"; btn.textContent = "📋 content.js용 복사";
         btn.onclick = () => {
-          const code = ` { sit: "${p.sit}",\n   good: "${p.good}",\n   bad: "${p.bad}" },`;
+          // JS 문자열로 안전하게 escape (따옴표·역슬래시·줄바꿈)
+          const jesc = s => String(s || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ");
+          const code = ` { sit: "${jesc(p.sit)}",\n   good: "${jesc(p.good)}",\n   bad: "${jesc(p.bad)}" },`;
           navigator.clipboard.writeText(code).then(()=>{ btn.textContent = "복사됨 ✔"; });
         };
         div.appendChild(btn); list.appendChild(div);
@@ -247,21 +249,24 @@ let lastRiders = [];
 const WRONG_KEYS = ["파국화","독심술","흑백논리","과잉일반화","개인화","당위진술","감정적 추론","낙인찍기"];
 $("#btn-csv").onclick = () => {
   if (!lastRiders.length){ alert("아직 데이터가 없어요!"); return; }
-  const esc = v => `"${String(v??"").replace(/"/g,'""')}"`;
-  const head = ["이름","반딧불이(누적)","호흡싱크(%)","여정 진행","여정 완주",
-    "밤의 숲","새벽 바다","등불 골목","도시의 밤","부딪힌 생각",...WRONG_KEYS,"한 줄 성찰"];
+  // 수식 주입 방어: 선행 = + - @ 탭은 '로 중화 (엑셀에서 수식으로 해석 방지)
+  const esc = v => { let s = String(v??"");
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return `"${s.replace(/"/g,'""')}"`; };
+  const head = ["이름","반딧불이(누적)","호흡싱크(평균%)","여정 진행","여정 완주",
+    "밤의 숲","새벽 바다","등불 골목","도시의 밤","부딪힌 생각(누적)",...WRONG_KEYS,"한 줄 성찰"];
   const gradeKo = { gold:"금", silver:"은", bronze:"동" };
   const mapCell = (r, k) => {
     const m = (r.journey || {})[k];
-    return m ? `${gradeKo[m.grade] || "완주"} ✦${m.ff || 0}` : "";
+    return m ? `${gradeKo[m.grade] || "완주"} ✦${num(m.ff)} (호흡 ${num(m.sync)}%)` : "";
   };
   const rows = lastRiders.map(r => [
-    r.name||"라이더", r.ff||0, r.sync||0,
-    (r.mapsDone != null ? `${r.mapsDone}/4` : (r.done ? "완주(구버전)" : "")),
-    r.done?"O":"",
+    r.name||"라이더", num(r.ff), num(r.sync),
+    (r.mapsDone != null ? `${num(r.mapsDone)}/4` : (r.done ? "완주(구버전)" : "")),
+    (r.done && r.mapsDone != null) ? "O" : (r.done ? "구버전 완주" : ""),
     mapCell(r,"night"), mapCell(r,"sea"), mapCell(r,"alley"), mapCell(r,"city"),
-    r.hits||0,
-    ...WRONG_KEYS.map(k => (r.wrong||{})[k]||0), r.note||""
+    num(r.hits),
+    ...WRONG_KEYS.map(k => num((r.wrong||{})[k])), r.note||""
   ].map(esc).join(","));
   const csv = "﻿" + head.map(esc).join(",") + "\n" + rows.join("\n");
   const a = document.createElement("a");
@@ -271,10 +276,13 @@ $("#btn-csv").onclick = () => {
 };
 
 const MEDAL = { gold: "🥇", silver: "🥈", bronze: "🥉" };
+// Firestore 값 방어: 숫자 강제 + HTML escape (조작 문서로 인한 XSS 차단)
+const num = v => { const n = +v; return isFinite(n) ? n : 0; };
+const escH = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function render(snap){
   const riders = [];
   snap.forEach(d => riders.push({ id: d.id, ...d.data() }));
-  riders.sort((a, b) => (b.ff || 0) - (a.ff || 0));
+  riders.sort((a, b) => (num(b.ff)) - (num(a.ff)));
   lastRiders = riders;
 
   // 한 줄 성찰 벽
@@ -284,17 +292,19 @@ function render(snap){
       `<span class="noteChip"><b>${(r.name||"라이더").replace(/[<>&]/g,"")}</b>${(r.note||"").replace(/[<>&]/g,"")}</span>`).join("");
   }
 
-  const totalFF = riders.reduce((s, r) => s + (r.ff || 0), 0);
-  const nDone = riders.filter(r => r.done).length;
+  const totalFF = riders.reduce((s, r) => s + num(r.ff), 0);
+  const nDone = riders.filter(r => r.done && r.mapsDone != null).length; // 4맵 여정 완주만
   $("#n-riders").textContent = riders.length;
   $("#n-done").textContent = nDone;
   $("#n-ff").textContent = totalFF;
 
-  // 숲 목표: 시작한 맵 수 × 40 (여정이 진행될수록 목표도 함께 확장)
+  // 숲 목표: 시작한 맵 수 × 40 — '실제로 새 맵을 달리는 중'일 때만 진행분 가산
   const mapsStarted = riders.reduce((s, r) => {
-    const md = r.mapsDone != null ? r.mapsDone : (r.done ? 1 : 0);
-    const riding = (r.mapsDone != null) ? (r.mapsDone < 4 ? 1 : 0) : (r.done ? 0 : 1);
-    return s + Math.max(1, md + riding);
+    if (r.mapsDone != null) {
+      const riding = (r.active && r.curMap && (!r.journey || !r.journey[r.curMap])) ? 1 : 0;
+      return s + Math.max(1, num(r.mapsDone) + riding);
+    }
+    return s + 1; // 구버전 데이터: 1맵 기준
   }, 0);
   const goal = Math.max(mapsStarted, riders.length, 1) * 40;
   const pct = Math.min(100, Math.round(totalFF / goal * 100));
@@ -309,45 +319,46 @@ function render(snap){
   const MAPICONS = [["night","🌃"],["sea","🌊"],["alley","🏮"],["city","🌆"]];
   for (const r of riders){
     const d = document.createElement("div");
-    d.className = "rider" + (r.done ? " done" : "");
+    d.className = "rider" + ((r.done && r.mapsDone != null) ? " done" : "");
     if (prevFF[r.id] !== undefined && prevFF[r.id] !== r.ff) d.classList.add("flash");
     prevFF[r.id] = r.ff;
     let st, jprog, slots = "";
     const jn = r.journey || null;
     if (jn || r.mapsDone != null) {                 // 여정 데이터 (v5)
-      const md = r.mapsDone != null ? r.mapsDone : Object.keys(jn || {}).length;
-      const ridingCur = r.curMap && (!jn || !jn[r.curMap]) && md < 4;
+      const md = num(r.mapsDone != null ? r.mapsDone : Object.keys(jn || {}).length);
+      const act = !!r.active;                       // 지금 실제 주행 중(재도전 포함)
+      const newMapRiding = act && r.curMap && (!jn || !jn[r.curMap]);
       slots = `<div class="jrow">` + MAPICONS.map(([k, ic]) => {
         const m = jn ? jn[k] : null;
         if (m) return `<span class="jm jd">${ic}${MEDAL[m.grade] || "✅"}</span>`;
-        if (r.curMap === k && md < 4) return `<span class="jm jc">${ic}▶</span>`;
+        if (r.curMap === k && act) return `<span class="jm jc">${ic}▶</span>`;
         return `<span class="jm jt">${ic}</span>`;
       }).join("") + `</div>`;
-      jprog = Math.min(100, Math.round((md * 100 + (ridingCur ? (r.prog || 0) : 0)) / 4));
+      jprog = Math.min(100, Math.round((md * 100 + (newMapRiding ? num(r.prog) : 0)) / 4));
       st = r.done
-        ? `🏁 여정 완주 · 호흡 ${r.sync || 0}%`
-        : `🗺 ${md}/4` + (ridingCur ? ` · 달리는 중 ${r.prog || 0}%` : ` · 다음 길 대기`);
+        ? (act ? `🔁 기록 갱신 중 ${num(r.prog)}%` : `🏁 여정 완주 · 호흡 ${num(r.sync)}%`)
+        : (act ? `🗺 ${md}/4 · 달리는 중 ${num(r.prog)}%` : `🗺 ${md}/4 · 대기 중`);
     } else {                                        // 구버전 데이터 폴백
-      st = r.done ? `${MEDAL[r.grade] || "🏁"} 완주 · 호흡 ${r.sync || 0}%`
-                  : `달리는 중 ${r.prog || 0}%`;
-      jprog = r.done ? 100 : (r.prog || 0);
+      st = r.done ? `${MEDAL[r.grade] || "🏁"} 완주 · 호흡 ${num(r.sync)}%`
+                  : `달리는 중 ${num(r.prog)}%`;
+      jprog = r.done ? 100 : num(r.prog);
     }
-    d.innerHTML = `<div class="nm">${(r.name || "라이더").replace(/[<>&]/g, "")}</div>
-      <div class="ff">✦ ${r.ff || 0}</div><div class="st">${st}</div>${slots}
+    d.innerHTML = `<div class="nm">${escH(r.name || "라이더")}</div>
+      <div class="ff">✦ ${num(r.ff)}</div><div class="st">${st}</div>${slots}
       <div class="prog"><i style="width:${jprog}%"></i></div>`;
     grid.appendChild(d);
   }
 
   // 오답 TOP3
   const agg = {};
-  for (const r of riders) for (const k in (r.wrong || {})) agg[k] = (agg[k] || 0) + r.wrong[k];
+  for (const r of riders) for (const k in (r.wrong || {})) agg[k] = (agg[k] || 0) + num(r.wrong[k]);
   const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const wl = $("#wrongList");
   if (!top.length){ wl.innerHTML = '<div id="wrongEmpty">인지왜곡 관문 결과가 모이면 여기에 표시됩니다.<br>다음 수업의 포인트로 활용해보세요!</div>'; return; }
   const max = top[0][1];
   wl.innerHTML = top.map(([k, v], i) =>
     `<div class="wrongItem"><span class="rank">${["🥇","🥈","🥉"][i]}</span>
-     <div style="flex:1"><div class="name">${k}</div>
+     <div style="flex:1"><div class="name">${escH(k)}</div>
      <div class="wbar" style="width:${Math.round(v / max * 100)}%"></div></div>
      <span class="cnt">${v}회</span></div>`).join("");
 }
