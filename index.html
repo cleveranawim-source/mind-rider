@@ -846,13 +846,16 @@ function newStats(){ return {ff:0, hits:0, dodged:0, forced:0,
 const FB_CONFIG={apiKey:"AIzaSyAPjRhpGsBiILOk4xIO6qdwU5deE556nis",authDomain:"mind-jump.firebaseapp.com",
   projectId:"mind-jump",storageBucket:"mind-jump.firebasestorage.app",
   messagingSenderId:"640879942374",appId:"1:640879942374:web:072026fb598ddc39777927"};
-let db=null, fbPromise=null, roomCode=null, roomUnsub=null, roomCount=0, roomOthersFF=0, pushT=0;
-const riderId=localStorage.getItem("mr_rid")||(()=>{
-  const v="r"+Math.random().toString(36).slice(2,10); localStorage.setItem("mr_rid",v); return v;})();
+let db=null, fbPromise=null, fbUid=null, roomCode=null, roomUnsub=null, roomCount=0, roomOthersFF=0, pushT=0;
+// 개발 PC에서 ?emu 를 붙여 열 때만 로컬 에뮬레이터로 (배포 주소 github.io 에서는 켜지지 않음)
+const FB_EMU=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has("emu");
 let riderName="", riderDocId=null;
-// 닉네임 기반 ID: 같은 닉네임이면 기기가 바뀌어도 같은 학생으로 이어짐 (없으면 기기 ID)
+// 문서 ID = '익명 로그인 uid_닉네임' (보안 규칙: 내 uid 로 시작하는 문서만 쓰기)
+//  · 공용 태블릿: uid 가 같아도 닉네임이 다르면 학생별로 따로 기록
+//  · 기기를 바꾼 학생: 같은 닉네임(nk) 기록을 찾아 여정을 이어 붙임 (btnGo 참고)
 const normName=s=>(s||"").replace(/\s+/g,"").toLowerCase();
-function computeDocId(){ const n=normName(riderName); return n?("n_"+n):riderId; }
+const nameKey=()=>normName(riderName).replace(/\//g,"_");   // 문서 경로에 / 는 못 씀
+function computeDocId(){ return fbUid?(fbUid+"_"+(nameKey()||"anon")):null; }
 function loadScript(src){return new Promise((ok,err)=>{
   const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=err; document.head.appendChild(s);});}
 function initFB(){
@@ -864,9 +867,15 @@ function initFB(){
           await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
           await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js");
         }
+        if(!firebase.auth) await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js");
         if(!firebase.apps||!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
-        db=firebase.firestore();
-      }catch(e){ db=null; fbPromise=null; } // 실패 시 다음 입장에서 재시도 가능
+        const fdb=firebase.firestore();
+        if(FB_EMU&&!window.__mrEmu){ window.__mrEmu=1;
+          fdb.useEmulator("127.0.0.1",8080); firebase.auth().useEmulator("http://127.0.0.1:9099"); }
+        // 익명 로그인 — 같은 기기·브라우저면 다음 차시에도 같은 uid
+        fbUid=(await firebase.auth().signInAnonymously()).user.uid;
+        db=fdb;
+      }catch(e){ db=null; fbUid=null; fbPromise=null; } // 실패 시 다음 입장에서 재시도 가능
       return db;
     })();
   }
@@ -876,8 +885,13 @@ function subscribeRoom(){
   if(!db||!roomCode)return;
   if(roomUnsub){try{roomUnsub();}catch(e){}}
   roomUnsub=db.collection("rooms").doc(roomCode).collection("riders").onSnapshot(snap=>{
+    // 기기를 바꾼 학생은 문서가 둘일 수 있어 닉네임별로 가장 큰 기록만 센다
+    const best={}, me=nameKey();
+    snap.forEach(d=>{ const r=d.data()||{};
+      const k=r.nk||normName(r.name)||d.id, ff=(+r.ff||0);
+      if(!(k in best)||ff>best[k]) best[k]=ff; });
     let sum=0,n=0;
-    snap.forEach(d=>{ n++; if(d.id!==riderDocId) sum+=(+d.data().ff||0); });
+    for(const k in best){ n++; if(!(me&&k===me)&&k!==riderDocId) sum+=best[k]; }
     roomOthersFF=sum; roomCount=n;
   },()=>{});
 }
@@ -928,7 +942,7 @@ function pushRider(final){
   if(!db||!roomCode||!stats||!riderDocId)return;
   const sync=stats.breathTotal>0?Math.round(stats.breathMatch/stats.breathTotal*100):0;
   const doc={
-    name:riderName||"라이더", game:"mind-ride",
+    name:riderName||"라이더", nk:nameKey(), game:"mind-ride",
     curMap:themeCur, active:!final,               // active: 지금 실제로 달리는 중인가
     prog:Math.min(100,Math.round(position/trackLen*100)),
     ts:firebase.firestore.FieldValue.serverTimestamp()
@@ -2025,7 +2039,7 @@ $("#btnGo").addEventListener("click",()=>{initAudio();
     riderName=($("#inpName").value||"").trim();
     if(roomCode){
       // 여정 모드: 로컬 여정 로드 → Firestore에 더 앞선 기록이 있으면 복원(같은 닉네임이면 기기 변경도 이어짐)
-      riderDocId=computeDocId();
+      riderDocId=null;                             // 익명 로그인 뒤에 정해진다 (initFB 다음)
       journey=loadJourney(roomCode);
       goLock=true;
       const btn=$("#btnGo"), oldTxt=btn.textContent;
@@ -2040,14 +2054,25 @@ $("#btnGo").addEventListener("click",()=>{initAudio();
         }
         startWithIntro(); };
       initFB().then(async d=>{
-        if(d){
-          if(roomCode) subscribeRoom();
+        if(d&&roomCode){
+          riderDocId=computeDocId();
+          subscribeRoom();
           if(!launched){ // 출발 전에만 원격 여정 복원 (주행 중 교체 금지)
             try{
-              const snap=await db.collection("rooms").doc(roomCode)
-                .collection("riders").doc(riderDocId).get();
-              const r=snap.exists?snap.data():null;
-              if(!launched&&r&&r.journey&&Object.keys(r.journey).length>journeyMapsDone()){
+              // 같은 닉네임 기록(다른 기기 포함) + 예전 방식(n_닉네임) 기록 중 가장 앞선 여정
+              const col=db.collection("rooms").doc(roomCode).collection("riders"), nk=nameKey();
+              const found=[];
+              const mine=await col.doc(riderDocId).get();
+              if(mine.exists) found.push(mine.data());
+              if(nk){
+                const q=await col.where("nk","==",nk).get();
+                q.forEach(x=>found.push(x.data()));
+                const old=await col.doc("n_"+nk).get();
+                if(old.exists) found.push(old.data());
+              }
+              let r=null;
+              for(const x of found) if(x&&x.journey&&(!r||Object.keys(x.journey).length>Object.keys(r.journey).length)) r=x;
+              if(!launched&&r&&Object.keys(r.journey).length>journeyMapsDone()){
                 journey.perMap=r.journey;
                 journey.wrongAll=r.wrong||journey.wrongAll;
                 saveJourney();

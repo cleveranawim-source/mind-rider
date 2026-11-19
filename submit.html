@@ -6,6 +6,7 @@
 <title>우리 반 갈림길 만들기 — 마음의 밤길 라이더</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{--mint:#3FE5A0;--pink:#ff4fa3;--cyan:#38d4ff;--ink:#eaf4ff;--dim:#8fa3c0}
   *{margin:0;padding:0;box-sizing:border-box}
@@ -69,6 +70,10 @@ firebase.initializeApp({
   appId: "1:640879942374:web:072026fb598ddc39777927"
 });
 const db = firebase.firestore();
+// 개발 PC에서 ?emu 를 붙여 열 때만 로컬 에뮬레이터로 (배포 주소에서는 켜지지 않음)
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("emu")){
+  db.useEmulator("127.0.0.1", 8080); firebase.auth().useEmulator("http://127.0.0.1:9099");
+}
 const $ = s => document.querySelector(s);
 const qRoom = new URLSearchParams(location.search).get("room");
 if (qRoom) $("#room").value = qRoom.toUpperCase();
@@ -83,8 +88,10 @@ $("#btnSend").onclick = async () => {
   if (!sit || !good || !bad) { $("#err").textContent = "①②③을 모두 채워주세요!"; return; }
   $("#btnSend").disabled = true; $("#err").textContent = "";
   try {
+    // 보안 규칙: 익명 로그인한 사람만, 내 uid 를 적어서 제안을 올릴 수 있다
+    const uid = (await firebase.auth().signInAnonymously()).user.uid;
     await db.collection("rooms").doc(room).collection("proposals").add({
-      sit, good, bad, by, ts: firebase.firestore.FieldValue.serverTimestamp()
+      sit, good, bad, by, uid, ts: firebase.firestore.FieldValue.serverTimestamp()
     });
     $("#form").style.display = "none"; $("#done").style.display = "block";
   } catch (e) {

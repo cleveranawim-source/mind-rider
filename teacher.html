@@ -6,6 +6,7 @@
 <title>마음의 밤길 라이더 — 교사 발표모드</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{--mint:#3FE5A0;--pink:#ff4fa3;--cyan:#38d4ff;--bg:#05070e;
     --panel:rgba(12,18,34,.92);--ink:#eaf4ff;--dim:#8fa3c0}
@@ -131,7 +132,8 @@
           <div><div class="bignum" id="n-ff">0</div><div class="lbl">반 전체 ✦</div></div>
         </div>
         <button class="ghost" id="btn-csv" style="margin-top:12px;width:100%">📥 결과 저장 (CSV — 엑셀용)</button>
-        <button class="ghost" id="btn-clear" style="margin-top:8px;width:100%;font-size:13px">🧹 방 초기화 (기록 전체 삭제)</button>
+        <button class="ghost" id="btn-clear" style="margin-top:8px;width:100%;font-size:13px">🙈 지금 기록 모두 숨기기 (새 수업용)</button>
+        <button class="ghost" id="btn-unhide" style="margin-top:6px;width:100%;font-size:12px;display:none">숨긴 기록 다시 보기</button>
       </div>
     </div>
 
@@ -182,6 +184,16 @@ const FB_CONFIG = {
 };
 firebase.initializeApp(FB_CONFIG);
 const db = firebase.firestore();
+// 개발 PC에서 ?emu 를 붙여 열 때만 로컬 에뮬레이터로 (배포 주소에서는 켜지지 않음)
+if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("emu")){
+  db.useEmulator("127.0.0.1", 8080); firebase.auth().useEmulator("http://127.0.0.1:9099");
+}
+// 보안 규칙: 익명 로그인한 사람만 읽을 수 있다 → 교사 화면도 먼저 익명 로그인
+let authP = null;
+function signIn(){
+  if (!authP) authP = firebase.auth().signInAnonymously().catch(e => { authP = null; throw e; });
+  return authP;
+}
 
 const GAME_URL = "https://cleveranawim-source.github.io/mind-rider/";
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // 헷갈리는 I·O·0·1 제외
@@ -219,19 +231,81 @@ function startLive(code){
     + encodeURIComponent(GAME_URL + "?room=" + code);
   const row = $("#shroomRow"); row.innerHTML = "";
   for (let i = 0; i < 10; i++){ const s = document.createElement("span"); s.textContent = "🍄"; row.appendChild(s); }
-  listen(code, 0);
-  listenProposals(code);
+  signIn().then(() => { listen(code, 0); listenProposals(code); }).catch(() => {
+    $("#grid").innerHTML = '<div id="empty">😢 실시간 연결(익명 로그인)에 실패했어요.<br>잠시 뒤 새로고침해 주세요.</div>';
+  });
+  updateUnhide();
+}
+
+// ── 숨기기 (보안 규칙상 기록은 지울 수 없음 → 이 교사 화면에서만 가림) ──
+// 실제 정리(삭제)는 교목님 관리 도구로: mind-jump-firebase/docs 참고
+const normName = s => String(s || "").replace(/\s+/g, "").toLowerCase();
+const riderKey = r => r.nk || normName(r.name) || r.id;
+const hideKey = () => "mr_hide_" + curCode;
+function loadHidden(){
+  try { const h = JSON.parse(localStorage.getItem(hideKey()) || "null");
+    if (h && Array.isArray(h.riders) && Array.isArray(h.props)) return h; } catch(e){}
+  return { riders: [], props: [] };
+}
+function saveHidden(h){ try { localStorage.setItem(hideKey(), JSON.stringify(h)); } catch(e){} updateUnhide(); }
+function updateUnhide(){
+  if (!curCode) return;
+  const h = loadHidden(), n = h.riders.length + h.props.length;
+  const b = $("#btn-unhide");
+  b.style.display = n ? "block" : "none";
+  b.textContent = `숨긴 기록 다시 보기 (${n})`;
+}
+// 같은 닉네임 문서가 여럿이면(기기를 바꾼 학생) 가장 최근 것만, 숨긴 학생은 빼고
+// 같은 학생(닉네임)의 기록이 여러 기기에 나뉘어 있으면 한 사람으로 합친다:
+//  최신 기록을 바탕으로 하되, 비어 있는 칸(예: 앞 기기에서 남긴 한 줄 성찰)은 이전 기록으로 채우고
+//  맵별 기록은 맵마다 더 좋은 쪽, 누적 반딧불이·완주한 길 수는 큰 쪽을 쓴다.
+function visibleRiders(raw){
+  const hidden = new Set(loadHidden().riders), groups = new Map();
+  const t = r => (r.ts && r.ts.toMillis) ? r.ts.toMillis() : 0;
+  for (const r of raw){
+    const k = riderKey(r);
+    if (hidden.has(k)) continue;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const out = [];
+  for (const list of groups.values()){
+    if (list.length === 1){ out.push(list[0]); continue; }
+    list.sort((a, b) => t(a) - t(b));               // 오래된 기록 → 최신 기록 순서로 덮어쓰기
+    const m = {};
+    for (const r of list)
+      for (const [f, v] of Object.entries(r)) if (v !== undefined && v !== null && v !== "") m[f] = v;
+    const journey = {};
+    for (const r of list)
+      for (const [map, run] of Object.entries(r.journey || {}))
+        if (run && (!journey[map] || num(run.ff) > num(journey[map].ff))) journey[map] = run;
+    if (Object.keys(journey).length) m.journey = journey;
+    m.ff = Math.max(...list.map(r => num(r.ff)));
+    m.mapsDone = Math.max(...list.map(r => num(r.mapsDone)));
+    m.done = list.some(r => r.done);
+    out.push(m);
+  }
+  return out;
 }
 
 // ── 문항 공모함 ──
 function listenProposals(code){
   db.collection("rooms").doc(code).collection("proposals").orderBy("ts","desc").limit(30)
     .onSnapshot(snap => {
-      const list = $("#propList");
-      if (snap.empty){ $("#propCnt").textContent = ""; return; }
-      $("#propCnt").textContent = snap.size + "건";
-      list.innerHTML = "";
-      snap.forEach(d => {
+      lastProps = snap.docs;
+      drawProps();
+    }, ()=>{});
+}
+let lastProps = [];
+function drawProps(){
+  const list = $("#propList");
+  const hidden = new Set(loadHidden().props);
+  const docs = lastProps.filter(d => !hidden.has(d.id));
+  if (!docs.length){ $("#propCnt").textContent = "";
+    list.innerHTML = '<div class="empty-sub">학생들이 제안한 갈림길 문항이 여기에 쌓입니다.</div>'; return; }
+  $("#propCnt").textContent = docs.length + "건";
+  list.innerHTML = "";
+  docs.forEach(d => {
         const p = d.data(), esc = s => (s||"").replace(/[<>&]/g,"");
         const div = document.createElement("div");
         div.className = "prop";
@@ -248,28 +322,25 @@ function listenProposals(code){
           navigator.clipboard.writeText(code).then(()=>{ btn.textContent = "복사됨 ✔"; });
         };
         div.appendChild(btn); list.appendChild(div);
-      });
-    }, ()=>{});
+  });
 }
 
-// ── 방 초기화 ──
-$("#btn-clear").onclick = async () => {
+// ── 모두 숨기기 (보안 규칙상 삭제는 막힘 — 새 수업은 '새 코드'를 권장) ──
+$("#btn-clear").onclick = () => {
   if (!curCode) return;
-  if (!confirm(`교실 ${curCode}의 모든 학생 기록과 공모 문항을 삭제할까요?\n\n· 이 작업은 되돌릴 수 없습니다\n· 학생 기기에 저장된 여정은 다시 입장하면 다시 올라올 수 있어요\n· 완전히 새로 시작하려면 '새 코드'를 만드는 것을 권장합니다`)) return;
-  const btn = $("#btn-clear"); btn.disabled = true; btn.textContent = "삭제 중…";
-  try {
-    for (const col of ["riders", "proposals"]) {
-      const s = await db.collection("rooms").doc(curCode).collection(col).get();
-      await Promise.all(s.docs.map(d => d.ref.delete()));
-    }
-    prevFF = {};
-    btn.textContent = "🧹 초기화 완료";
-  } catch (e) {
-    alert("삭제 중 오류: " + (e.code || e.message));
-    btn.textContent = "🧹 방 초기화 (기록 전체 삭제)";
-  }
-  btn.disabled = false;
-  setTimeout(() => { btn.textContent = "🧹 방 초기화 (기록 전체 삭제)"; }, 2500);
+  if (!confirm(`교실 ${curCode}에 지금 보이는 학생 기록과 공모 문항을 이 화면에서 모두 숨길까요?\n\n· 자료는 지워지지 않아요 (이 기기의 교사 화면에서만 가려져요)\n· '숨긴 기록 다시 보기'로 언제든 되돌릴 수 있어요\n· 완전히 새로 시작하려면 '새 코드'를 만드는 것을 권장합니다`)) return;
+  const h = loadHidden();
+  for (const r of lastRaw){ const k = riderKey(r); if (!h.riders.includes(k)) h.riders.push(k); }
+  for (const d of lastProps) if (!h.props.includes(d.id)) h.props.push(d.id);
+  saveHidden(h);
+  prevFF = {};
+  draw(); drawProps();
+};
+$("#btn-unhide").onclick = () => {
+  if (!curCode) return;
+  if (!confirm("숨긴 기록을 모두 다시 보이게 할까요?")) return;
+  saveHidden({ riders: [], props: [] });
+  draw(); drawProps();
 };
 
 // ── CSV 내보내기 ──
@@ -307,9 +378,14 @@ const MEDAL = { gold: "🥇", silver: "🥈", bronze: "🥉" };
 // Firestore 값 방어: 숫자 강제 + HTML escape (조작 문서로 인한 XSS 차단)
 const num = v => { const n = +v; return isFinite(n) ? n : 0; };
 const escH = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+let lastRaw = [];
 function render(snap){
-  const riders = [];
-  snap.forEach(d => riders.push({ id: d.id, ...d.data() }));
+  lastRaw = [];
+  snap.forEach(d => lastRaw.push({ id: d.id, ...d.data() }));
+  draw();
+}
+function draw(){
+  const riders = visibleRiders(lastRaw);
   riders.sort((a, b) => (num(b.ff)) - (num(a.ff)));
   lastRiders = riders;
 
@@ -374,12 +450,15 @@ function render(snap){
     d.innerHTML = `<div class="nm">${escH(r.name || "라이더")}</div>
       <div class="ff">✦ ${num(r.ff)}</div><div class="st">${st}</div>${slots}
       <div class="prog"><i style="width:${jprog}%"></i></div>`;
-    // 학생 기록 삭제 (장난 닉네임·중복 정리용)
+    // 학생 기록 숨기기 (장난 닉네임·중복 정리용 — 자료는 지워지지 않고 이 화면에서만 가림)
     const del = document.createElement("button");
-    del.className = "rdel"; del.textContent = "✕"; del.title = "이 학생 기록 삭제";
+    del.className = "rdel"; del.textContent = "✕"; del.title = "이 화면에서 숨기기";
     del.onclick = ev => { ev.stopPropagation();
-      if (confirm(`'${r.name || "라이더"}' 기록을 삭제할까요?\n(그 학생이 다시 입장하면 기기에 저장된 여정이 다시 올라올 수 있어요)`))
-        db.collection("rooms").doc(curCode).collection("riders").doc(r.id).delete().catch(()=>{});
+      if (confirm(`'${r.name || "라이더"}' 기록을 이 화면에서 숨길까요?\n(자료는 지워지지 않아요. '숨긴 기록 다시 보기'로 되돌릴 수 있어요)`)){
+        const h = loadHidden(), k = riderKey(r);
+        if (!h.riders.includes(k)) h.riders.push(k);
+        saveHidden(h); draw();
+      }
     };
     d.appendChild(del);
     grid.appendChild(d);
